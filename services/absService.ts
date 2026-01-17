@@ -1,4 +1,3 @@
-
 import { ABSUser, ABSLibraryItem, ABSSeries, ABSProgress } from '../types';
 
 export class ABSService {
@@ -6,8 +5,10 @@ export class ABSService {
   private token: string;
 
   constructor(serverUrl: string, token: string) {
-    let cleanUrl = serverUrl.trim().replace(/\/$/, '');
-    // Ensure https if not specified (crucial for DuckDNS/SSL setups)
+    // Robustly clean the server URL: trim whitespace and remove ALL trailing slashes
+    let cleanUrl = serverUrl.trim().replace(/\/+$/, '');
+    
+    // Enforce HTTPS if not explicitly provided as HTTP
     if (cleanUrl && !cleanUrl.startsWith('http')) {
       cleanUrl = `https://${cleanUrl}`;
     }
@@ -15,9 +16,51 @@ export class ABSService {
     this.token = token;
   }
 
+  /**
+   * Static login method configured to bypass preflight blocks and handle CORS.
+   * Endpoint: https://rs-audio-server.duckdns.org/api/login
+   */
+  static async login(serverUrl: string, username: string, password: string): Promise<any> {
+    // If the provided serverUrl is empty or default, we ensure the correct production endpoint
+    let baseUrl = serverUrl.trim().replace(/\/+$/, '');
+    if (!baseUrl || baseUrl === 'rs-audio-server.duckdns.org') {
+      baseUrl = 'https://rs-audio-server.duckdns.org';
+    }
+    
+    if (!baseUrl.startsWith('http')) {
+      baseUrl = `https://${baseUrl}`;
+    }
+
+    const endpoint = `${baseUrl}/api/login`;
+
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      mode: 'cors',           // Explicitly set CORS mode
+      credentials: 'include', // Include credentials/cookies for cross-origin requests
+      headers: {
+        'Content-Type': 'application/json' // Simple standard header
+      },
+      body: JSON.stringify({ 
+        username: username.trim(), 
+        password: password 
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => 'Unknown Error');
+      throw new Error(`Login failed (${response.status}): ${errorText}`);
+    }
+
+    return response.json();
+  }
+
   private async fetchApi(endpoint: string, options: RequestInit = {}) {
-    const response = await fetch(`${this.serverUrl}${endpoint}`, {
+    const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+    const url = `${this.serverUrl}${path}`;
+
+    const response = await fetch(url, {
       ...options,
+      mode: 'cors',
       credentials: 'include',
       headers: {
         'Authorization': `Bearer ${this.token}`,
@@ -58,13 +101,8 @@ export class ABSService {
 
   async saveProgress(itemId: string, currentTime: number, duration: number): Promise<void> {
     try {
-      await fetch(`${this.serverUrl}/api/me/progress/${itemId}`, {
+      await this.fetchApi(`/api/me/progress/${itemId}`, {
         method: 'PATCH',
-        credentials: 'include',
-        headers: {
-          'Authorization': `Bearer ${this.token}`,
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({
           currentTime,
           duration,
