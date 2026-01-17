@@ -7,7 +7,8 @@ interface LoginProps {
 }
 
 const Login: React.FC<LoginProps> = ({ onLogin }) => {
-  const [serverUrl, setServerUrl] = useState((process.env as any).ABS_SERVER_URL || '');
+  // Use VITE_ABS_URL from import.meta.env as requested
+  const [serverUrl, setServerUrl] = useState((import.meta as any).env?.VITE_ABS_URL || '');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -19,18 +20,37 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     setError('');
 
     try {
-      const cleanUrl = serverUrl.trim().replace(/\/$/, '');
+      let cleanUrl = serverUrl.trim().replace(/\/$/, '');
       if (!cleanUrl) throw new Error('Server URL is required');
+      
+      // Ensure https prefix to resolve ERR_SSL_UNRECOGNIZED_NAME_ALERT issues
+      if (!cleanUrl.startsWith('http')) {
+        cleanUrl = `https://${cleanUrl}`;
+      }
 
+      // Explicitly using credentials: 'include' and ensuring exact payload keys
       const response = await fetch(`${cleanUrl}/api/login`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
+        credentials: 'include',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({ 
+          username: username.trim(), 
+          password: password 
+        }),
       });
 
       if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.message || 'Invalid credentials or server URL');
+        let errorMsg = 'Invalid credentials or server URL';
+        try {
+          const data = await response.json();
+          errorMsg = data.message || errorMsg;
+        } catch (e) {
+          // If response isn't JSON
+        }
+        throw new Error(errorMsg);
       }
 
       const data = await response.json();
@@ -50,7 +70,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   };
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-center p-8 safe-top bg-black">
+    <div className="flex-1 flex flex-col items-center justify-center p-8 safe-top bg-black h-screen">
       <div className="w-full max-w-md space-y-12">
         <div className="text-center">
           <h1 className="text-6xl font-black tracking-tighter text-aether-purple mb-2 drop-shadow-[0_0_20px_rgba(157,80,187,0.4)]">R.S AUDIOBOOKS</h1>
@@ -61,8 +81,8 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
           <div className="space-y-2">
             <label className="text-[10px] font-black uppercase text-neutral-600 ml-4 tracking-widest">Server Endpoint</label>
             <input
-              type="url"
-              placeholder="https://your-server.com"
+              type="text"
+              placeholder="your-server.duckdns.org"
               value={serverUrl}
               onChange={(e) => setServerUrl(e.target.value)}
               className="w-full bg-neutral-950 border border-neutral-900 focus:border-aether-purple p-5 rounded-[24px] text-white placeholder-neutral-700 transition-all shadow-inner"
