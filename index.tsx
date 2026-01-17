@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ABSService } from './services/absService';
@@ -6,7 +7,7 @@ import { AuthState, AppScreen, ABSLibraryItem, ABSSeries, ABSChapter } from './t
 // --- COMPONENTS ---
 
 const Login: React.FC<{ onLogin: (auth: AuthState) => void }> = ({ onLogin }) => {
-  const [serverUrl, setServerUrl] = useState('');
+  const [serverUrl, setServerUrl] = useState((import.meta as any).env?.VITE_ABS_URL || '');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -17,12 +18,27 @@ const Login: React.FC<{ onLogin: (auth: AuthState) => void }> = ({ onLogin }) =>
     setLoading(true);
     setError('');
     try {
-      const cleanUrl = serverUrl.trim().replace(/\/$/, '');
+      let cleanUrl = serverUrl.trim().replace(/\/$/, '');
+      if (!cleanUrl) throw new Error('Server URL is required');
+      
+      // Enforce https prefix
+      if (!cleanUrl.startsWith('http')) {
+        cleanUrl = `https://${cleanUrl}`;
+      }
+
       const response = await fetch(`${cleanUrl}/api/login`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
+        credentials: 'include',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({ 
+          username: username.trim(), 
+          password: password 
+        }),
       });
+
       if (!response.ok) throw new Error('Invalid credentials or server URL');
       const data = await response.json();
       onLogin({
@@ -44,7 +60,7 @@ const Login: React.FC<{ onLogin: (auth: AuthState) => void }> = ({ onLogin }) =>
           <p className="text-neutral-600 uppercase tracking-[0.5em] text-[10px] font-black">Audiobookshelf Client</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <input type="url" placeholder="Server Endpoint" value={serverUrl} onChange={e => setServerUrl(e.target.value)} className="w-full bg-neutral-950 border border-neutral-900 focus:border-aether-purple p-5 rounded-[24px] text-white shadow-inner" required />
+          <input type="text" placeholder="your-server.duckdns.org" value={serverUrl} onChange={e => setServerUrl(e.target.value)} className="w-full bg-neutral-950 border border-neutral-900 focus:border-aether-purple p-5 rounded-[24px] text-white shadow-inner" required />
           <input type="text" placeholder="Username" value={username} onChange={e => setUsername(e.target.value)} className="w-full bg-neutral-950 border border-neutral-900 focus:border-aether-purple p-5 rounded-[24px] text-white shadow-inner" required />
           <input type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} className="w-full bg-neutral-950 border border-neutral-900 focus:border-aether-purple p-5 rounded-[24px] text-white shadow-inner" required />
           {error && <p className="text-red-500 text-[11px] font-bold text-center uppercase tracking-wider">{error}</p>}
@@ -199,7 +215,6 @@ const Player: React.FC<{ auth: AuthState, item: ABSLibraryItem, onBack: () => vo
   const currentChapter = chapters[currentChapterIndex];
   const chapterRemaining = currentChapter ? currentChapter.end - currentTime : 0;
 
-  // Fix: Added stopAfterLabel calculation which was missing and causing ReferenceError
   const stopAfterLabel = useMemo(() => {
     if (sleepChapters <= 0 || currentChapterIndex === -1) return null;
     const targetIdx = Math.min(chapters.length - 1, currentChapterIndex + sleepChapters - 1);
