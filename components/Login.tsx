@@ -1,14 +1,15 @@
-
 import React, { useState } from 'react';
 import { AuthState } from '../types';
+import { ABSService } from '../services/absService';
 
 interface LoginProps {
   onLogin: (auth: AuthState) => void;
 }
 
 const Login: React.FC<LoginProps> = ({ onLogin }) => {
-  // Use VITE_ABS_URL from import.meta.env as requested
-  const [serverUrl, setServerUrl] = useState((import.meta as any).env?.VITE_ABS_URL || '');
+  // Use VITE_ABS_URL from import.meta.env
+  const defaultUrl = (import.meta as any).env?.VITE_ABS_URL || 'rs-audio-server.duckdns.org';
+  const [serverUrl, setServerUrl] = useState(defaultUrl);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -20,40 +21,13 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     setError('');
 
     try {
-      let cleanUrl = serverUrl.trim().replace(/\/$/, '');
-      if (!cleanUrl) throw new Error('Server URL is required');
+      const data = await ABSService.login(serverUrl, username, password);
       
-      // Ensure https prefix to resolve ERR_SSL_UNRECOGNIZED_NAME_ALERT issues
+      let cleanUrl = serverUrl.trim().replace(/\/+$/, '');
       if (!cleanUrl.startsWith('http')) {
         cleanUrl = `https://${cleanUrl}`;
       }
 
-      // Explicitly using credentials: 'include' and ensuring exact payload keys
-      const response = await fetch(`${cleanUrl}/api/login`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify({ 
-          username: username.trim(), 
-          password: password 
-        }),
-      });
-
-      if (!response.ok) {
-        let errorMsg = 'Invalid credentials or server URL';
-        try {
-          const data = await response.json();
-          errorMsg = data.message || errorMsg;
-        } catch (e) {
-          // If response isn't JSON
-        }
-        throw new Error(errorMsg);
-      }
-
-      const data = await response.json();
       onLogin({
         serverUrl: cleanUrl,
         user: {
@@ -74,15 +48,15 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
       <div className="w-full max-w-md space-y-12">
         <div className="text-center">
           <h1 className="text-6xl font-black tracking-tighter text-aether-purple mb-2 drop-shadow-[0_0_20px_rgba(157,80,187,0.4)]">R.S AUDIOBOOKS</h1>
-          <p className="text-neutral-600 uppercase tracking-[0.5em] text-[10px] font-black">Authentication required</p>
+          <p className="text-neutral-600 uppercase tracking-[0.5em] text-[10px] font-black">Aether Interface 2.0</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <label className="text-[10px] font-black uppercase text-neutral-600 ml-4 tracking-widest">Server Endpoint</label>
+            <label className="text-[10px] font-black uppercase text-neutral-600 ml-4 tracking-widest">Hub Address</label>
             <input
               type="text"
-              placeholder="your-server.duckdns.org"
+              placeholder="rs-audio-server.duckdns.org"
               value={serverUrl}
               onChange={(e) => setServerUrl(e.target.value)}
               className="w-full bg-neutral-950 border border-neutral-900 focus:border-aether-purple p-5 rounded-[24px] text-white placeholder-neutral-700 transition-all shadow-inner"
@@ -90,7 +64,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             />
           </div>
           <div className="space-y-2">
-            <label className="text-[10px] font-black uppercase text-neutral-600 ml-4 tracking-widest">Credentials</label>
+            <label className="text-[10px] font-black uppercase text-neutral-600 ml-4 tracking-widest">Identity</label>
             <input
               type="text"
               placeholder="Username"
@@ -101,7 +75,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             />
             <input
               type="password"
-              placeholder="Password"
+              placeholder="Secret"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full bg-neutral-950 border border-neutral-900 focus:border-aether-purple p-5 rounded-[24px] text-white placeholder-neutral-700 transition-all shadow-inner"
@@ -120,7 +94,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             disabled={loading}
             className="w-full gradient-aether p-5 rounded-[24px] font-black text-lg tracking-widest hover:opacity-90 active:scale-95 transition-all disabled:opacity-50 mt-4 shadow-[0_10px_30px_rgba(157,80,187,0.3)]"
           >
-            {loading ? 'CONNECTING...' : 'LOGIN TO HUB'}
+            {loading ? 'SYNCING...' : 'INITIATE CONNECTION'}
           </button>
         </form>
       </div>
