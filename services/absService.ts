@@ -6,13 +6,19 @@ export class ABSService {
   private token: string;
 
   constructor(serverUrl: string, token: string) {
-    this.serverUrl = serverUrl.replace(/\/$/, '');
+    let cleanUrl = serverUrl.trim().replace(/\/$/, '');
+    // Ensure https if not specified (crucial for DuckDNS/SSL setups)
+    if (cleanUrl && !cleanUrl.startsWith('http')) {
+      cleanUrl = `https://${cleanUrl}`;
+    }
+    this.serverUrl = cleanUrl;
     this.token = token;
   }
 
   private async fetchApi(endpoint: string, options: RequestInit = {}) {
     const response = await fetch(`${this.serverUrl}${endpoint}`, {
       ...options,
+      credentials: 'include',
       headers: {
         'Authorization': `Bearer ${this.token}`,
         'Content-Type': 'application/json',
@@ -28,24 +34,20 @@ export class ABSService {
     return response.json();
   }
 
-  // Get all items (Audiobookshelf usually returns results as an array or paginated object)
   async getLibraryItems(): Promise<ABSLibraryItem[]> {
     const data = await this.fetchApi('/api/items');
     return data.results || data;
   }
 
-  // Get specific library item with full metadata and chapters
   async getItemDetails(id: string): Promise<ABSLibraryItem> {
     return this.fetchApi(`/api/items/${id}`);
   }
 
-  // Get all series
   async getSeries(): Promise<ABSSeries[]> {
     const data = await this.fetchApi('/api/series');
     return data.results || data;
   }
 
-  // Get specific progress for an item
   async getProgress(itemId: string): Promise<ABSProgress | null> {
     try {
       return await this.fetchApi(`/api/me/progress/${itemId}`);
@@ -54,11 +56,11 @@ export class ABSService {
     }
   }
 
-  // Save/Update playback progress
   async saveProgress(itemId: string, currentTime: number, duration: number): Promise<void> {
     try {
       await fetch(`${this.serverUrl}/api/me/progress/${itemId}`, {
         method: 'PATCH',
+        credentials: 'include',
         headers: {
           'Authorization': `Bearer ${this.token}`,
           'Content-Type': 'application/json',
