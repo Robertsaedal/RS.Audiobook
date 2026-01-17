@@ -1,0 +1,7 @@
+{
+  "name": "R.S Audiobooks",
+  "description": "A minimalist, sleek Audiobookshelf client with precision controls and chapter-based sleep timer.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}

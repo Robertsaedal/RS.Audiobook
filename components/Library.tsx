@@ -1,0 +1,212 @@
+
+import React, { useEffect, useState, useMemo } from 'react';
+import { AuthState, ABSLibraryItem, ABSSeries } from '../types';
+import { ABSService } from '../services/absService';
+
+interface LibraryProps {
+  auth: AuthState;
+  onSelectItem: (item: ABSLibraryItem) => void;
+  onLogout: () => void;
+}
+
+const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
+  const [items, setItems] = useState<ABSLibraryItem[]>([]);
+  const [series, setSeries] = useState<ABSSeries[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'RECENT' | 'SERIES' | 'HISTORY'>('RECENT');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedSeries, setSelectedSeries] = useState<ABSSeries | null>(null);
+
+  const absService = useMemo(() => new ABSService(auth.serverUrl, auth.user?.token || ''), [auth]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        const [libraryItems, seriesList] = await Promise.all([
+          absService.getLibraryItems(),
+          absService.getSeries()
+        ]);
+        setItems(libraryItems);
+        setSeries(seriesList);
+      } catch (e) {
+        console.error("Fetch failed", e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, [absService]);
+
+  const historyItems = useMemo(() => {
+    const savedHistory = JSON.parse(localStorage.getItem('rs_history') || '[]');
+    return items.filter(book => savedHistory.includes(book.id))
+      .sort((a, b) => savedHistory.indexOf(b.id) - savedHistory.indexOf(a.id));
+  }, [items]);
+
+  const filteredItems = useMemo(() => {
+    return items.filter(item => 
+      item.media?.metadata?.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.media?.metadata?.authorName?.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [items, searchTerm]);
+
+  const seriesItems = useMemo(() => {
+    if (!selectedSeries) return [];
+    return items.filter(item => selectedSeries.libraryItemIds.includes(item.id))
+      .sort((a, b) => parseInt(a.media.metadata.sequence || '0') - parseInt(b.media.metadata.sequence || '0'));
+  }, [selectedSeries, items]);
+
+  const handleBookSelect = (item: ABSLibraryItem) => {
+    const savedHistory = JSON.parse(localStorage.getItem('rs_history') || '[]');
+    const newHistory = [item.id, ...savedHistory.filter((id: string) => id !== item.id)].slice(0, 20);
+    localStorage.setItem('rs_history', JSON.stringify(newHistory));
+    onSelectItem(item);
+  };
+
+  return (
+    <div className="flex-1 flex flex-col safe-top overflow-hidden bg-black">
+      <div className="px-6 pt-4 space-y-4 shrink-0">
+        <div className="flex justify-between items-center">
+          <div>
+            <h2 className="text-2xl font-black tracking-tight text-aether-purple drop-shadow-[0_0_10px_rgba(157,80,187,0.4)]">R.S AUDIOBOOKS</h2>
+            <p className="text-[8px] uppercase tracking-[0.4em] text-neutral-600 font-black">Digital Audiobookshelf</p>
+          </div>
+          <button onClick={onLogout} className="text-[10px] font-black uppercase tracking-widest text-neutral-600 hover:text-white transition-colors">
+            Logout
+          </button>
+        </div>
+
+        <div className="relative group">
+          <input
+            type="text"
+            placeholder="Search title or author..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full bg-neutral-900/60 border border-white/5 focus:border-aether-purple/50 focus:bg-neutral-900 rounded-2xl py-4 pl-12 pr-4 text-sm text-white placeholder-neutral-700 transition-all"
+          />
+          <svg className="w-4 h-4 text-aether-purple absolute left-4 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+        </div>
+      </div>
+
+      <nav className="flex px-6 py-6 gap-6 shrink-0 border-b border-white/5">
+        {[
+          { id: 'RECENT', label: 'Library' },
+          { id: 'SERIES', label: 'Series' },
+          { id: 'HISTORY', label: 'History' }
+        ].map(tab => (
+          <button 
+            key={tab.id}
+            onClick={() => { setActiveTab(tab.id as any); setSelectedSeries(null); }}
+            className={`text-[10px] font-black uppercase tracking-[0.2em] transition-all relative pb-2 whitespace-nowrap ${activeTab === tab.id ? 'text-white' : 'text-neutral-600 hover:text-neutral-400'}`}
+          >
+            {tab.label}
+            {activeTab === tab.id && (
+              <div className="absolute bottom-0 left-0 w-full h-0.5 gradient-aether shadow-[0_0_15px_#9D50BB] animate-pulse" />
+            )}
+          </button>
+        ))}
+      </nav>
+
+      <div className="flex-1 overflow-y-auto px-6 py-6 no-scrollbar">
+        {loading ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-8">
+            {[1, 2, 3, 4, 5, 6].map(i => <div key={i} className="aspect-[2/3] bg-neutral-900/50 rounded-2xl animate-pulse border border-white/5" />)}
+          </div>
+        ) : (
+          <>
+            {activeTab === 'RECENT' && (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-8">
+                {filteredItems.map(item => (
+                  <BookCard key={item.id} item={item} onClick={() => handleBookSelect(item)} coverUrl={absService.getCoverUrl(item.id)} />
+                ))}
+              </div>
+            )}
+
+            {activeTab === 'HISTORY' && (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-8">
+                {historyItems.length > 0 ? historyItems.map(item => (
+                  <BookCard key={item.id} item={item} onClick={() => handleBookSelect(item)} isHistory coverUrl={absService.getCoverUrl(item.id)} />
+                )) : <EmptyState message="No History Yet" />}
+              </div>
+            )}
+
+            {activeTab === 'SERIES' && (
+              <>
+                {selectedSeries ? (
+                  <div className="animate-fade-in">
+                    <button onClick={() => setSelectedSeries(null)} className="flex items-center gap-2 text-aether-purple mb-6 text-[10px] font-black uppercase tracking-widest active:scale-95">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M15 19l-7-7 7-7"/></svg>
+                      Back to Series
+                    </button>
+                    <h3 className="text-xl font-black mb-8 border-l-4 border-aether-purple pl-4 uppercase tracking-tight">{selectedSeries.name}</h3>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-8">
+                      {seriesItems.map(item => (
+                        <BookCard key={item.id} item={item} onClick={() => handleBookSelect(item)} coverUrl={absService.getCoverUrl(item.id)} />
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-4">
+                    {series.filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase())).map(s => (
+                      <button 
+                        key={s.id} 
+                        onClick={() => setSelectedSeries(s)}
+                        className="bg-neutral-950 border border-neutral-900 p-5 rounded-3xl flex items-center justify-between group active:scale-[0.98] transition-all hover:border-aether-purple/30"
+                      >
+                        <div className="text-left">
+                          <h4 className="font-bold text-sm group-hover:text-aether-purple transition-colors uppercase tracking-tight">{s.name}</h4>
+                          <p className="text-[10px] font-black uppercase text-neutral-600 tracking-widest mt-1">{s.libraryItemIds.length} Books</p>
+                        </div>
+                        <svg className="w-5 h-5 text-neutral-800 group-hover:text-aether-purple transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M9 5l7 7-7 7"/></svg>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+
+            {!loading && filteredItems.length === 0 && <EmptyState message="No items found" sub="Check your server connection or library" />}
+          </>
+        )}
+      </div>
+
+      <style dangerouslySetInnerHTML={{ __html: `
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        @keyframes fade-in { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: translateX(0); } }
+        .animate-fade-in { animation: fade-in 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; }
+      `}} />
+    </div>
+  );
+};
+
+const BookCard: React.FC<{ item: ABSLibraryItem, onClick: () => void, coverUrl: string, isHistory?: boolean }> = ({ item, onClick, coverUrl, isHistory }) => (
+  <button onClick={onClick} className="flex flex-col text-left group transition-all active:scale-95 animate-fade-in">
+    <div className="aspect-[2/3] w-full bg-neutral-900 rounded-3xl overflow-hidden mb-4 relative shadow-2xl border border-white/5 group-hover:border-aether-purple/50 transition-all">
+      <img src={coverUrl} alt={item.media.metadata.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" loading="lazy" />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-80" />
+      {item.media.metadata.sequence && (
+        <div className="absolute top-3 left-3 bg-aether-purple px-2 py-0.5 rounded-lg border border-white/20 shadow-xl">
+          <span className="text-[9px] font-black text-white">#{item.media.metadata.sequence}</span>
+        </div>
+      )}
+    </div>
+    <h3 className="text-[13px] font-bold line-clamp-1 mb-0.5 group-hover:text-aether-purple transition-colors leading-tight uppercase tracking-tight">{item.media.metadata.title}</h3>
+    <p className="text-[10px] font-black uppercase tracking-widest text-neutral-600 truncate">{item.media.metadata.authorName}</p>
+  </button>
+);
+
+const EmptyState = ({ message, sub }: { message: string, sub?: string }) => (
+  <div className="col-span-full flex flex-col items-center justify-center py-20 text-center animate-fade-in">
+    <div className="w-16 h-16 rounded-full bg-neutral-950 border border-neutral-900 flex items-center justify-center mb-6 text-neutral-800">
+      <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+    </div>
+    <h3 className="text-sm font-black text-neutral-600 uppercase tracking-[0.2em]">{message}</h3>
+    {sub && <p className="text-[10px] font-black uppercase text-neutral-800 tracking-widest mt-2">{sub}</p>}
+  </div>
+);
+
+export default Library;
