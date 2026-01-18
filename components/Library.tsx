@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState, useMemo } from 'react';
 import { AuthState, ABSLibraryItem, ABSSeries } from '../types';
 import { ABSService } from '../services/absService';
@@ -14,7 +15,7 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'RECENT' | 'SERIES' | 'HISTORY'>('RECENT');
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedSeries, setSelectedSeries] = useState<ABSSeries | null>(null);
+  const [selectedSeries, setSelectedSeries] = useState<any | null>(null);
 
   const absService = useMemo(() => new ABSService(auth.serverUrl, auth.user?.token || ''), [auth]);
 
@@ -50,10 +51,48 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
     );
   }, [items, searchTerm]);
 
+  // Unified Series Logic with Fallback Grouping
+  const processedSeries = useMemo(() => {
+    let result: any[] = [];
+    if (series.length > 0) {
+      result = series.map(s => {
+        // Try to find the first book in this series to get a cover
+        const firstItem = items.find(i => s.libraryItemIds.includes(i.id));
+        return {
+          ...s,
+          coverUrl: firstItem ? absService.getCoverUrl(firstItem.id) : ''
+        };
+      });
+    } else {
+      // Fallback: Group library items by seriesName
+      const groups: Record<string, any> = {};
+      items.forEach(item => {
+        const name = item.media.metadata.seriesName;
+        if (name) {
+          if (!groups[name]) {
+            groups[name] = {
+              id: `local-series-${name}`,
+              name: name,
+              libraryItemIds: [],
+              coverUrl: absService.getCoverUrl(item.id)
+            };
+          }
+          groups[name].libraryItemIds.push(item.id);
+        }
+      });
+      result = Object.values(groups);
+    }
+    return result.sort((a, b) => a.name.localeCompare(b.name));
+  }, [series, items, absService]);
+
   const seriesItems = useMemo(() => {
     if (!selectedSeries) return [];
     return items.filter(item => selectedSeries.libraryItemIds.includes(item.id))
-      .sort((a, b) => parseInt(a.media.metadata.sequence || '0') - parseInt(b.media.metadata.sequence || '0'));
+      .sort((a, b) => {
+        const seqA = parseFloat(a.media.metadata.sequence || '0');
+        const seqB = parseFloat(b.media.metadata.sequence || '0');
+        return seqA - seqB;
+      });
   }, [selectedSeries, items]);
 
   const handleBookSelect = (item: ABSLibraryItem) => {
@@ -79,7 +118,7 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
         <div className="relative group">
           <input
             type="text"
-            placeholder="Search title or author..."
+            placeholder="Search title, author, or series..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full bg-neutral-900/60 border border-white/5 focus:border-aether-purple/50 focus:bg-neutral-900 rounded-2xl py-4 pl-12 pr-4 text-sm text-white placeholder-neutral-700 transition-all"
@@ -109,7 +148,7 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
         ))}
       </nav>
 
-      <div className="flex-1 overflow-y-auto px-6 py-6 no-scrollbar">
+      <div className="flex-1 overflow-y-auto px-6 py-6 no-scrollbar scroll-container">
         {loading ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-8">
             {[1, 2, 3, 4, 5, 6].map(i => <div key={i} className="aspect-[2/3] bg-neutral-900/50 rounded-2xl animate-pulse border border-white/5" />)}
@@ -141,33 +180,23 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
                       Back to Series
                     </button>
                     <h3 className="text-xl font-black mb-8 border-l-4 border-aether-purple pl-4 uppercase tracking-tight">{selectedSeries.name}</h3>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-8">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-8">
                       {seriesItems.map(item => (
                         <BookCard key={item.id} item={item} onClick={() => handleBookSelect(item)} coverUrl={absService.getCoverUrl(item.id)} />
                       ))}
                     </div>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 gap-4">
-                    {series.filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase())).map(s => (
-                      <button 
-                        key={s.id} 
-                        onClick={() => setSelectedSeries(s)}
-                        className="bg-neutral-950 border border-neutral-900 p-5 rounded-3xl flex items-center justify-between group active:scale-[0.98] transition-all hover:border-aether-purple/30"
-                      >
-                        <div className="text-left">
-                          <h4 className="font-bold text-sm group-hover:text-aether-purple transition-colors uppercase tracking-tight">{s.name}</h4>
-                          <p className="text-[10px] font-black uppercase text-neutral-600 tracking-widest mt-1">{s.libraryItemIds.length} Books</p>
-                        </div>
-                        <svg className="w-5 h-5 text-neutral-800 group-hover:text-aether-purple transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M9 5l7 7-7 7"/></svg>
-                      </button>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-8">
+                    {processedSeries.filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase())).map(s => (
+                      <SeriesCard key={s.id} series={s} onClick={() => setSelectedSeries(s)} />
                     ))}
                   </div>
                 )}
               </>
             )}
 
-            {!loading && filteredItems.length === 0 && <EmptyState message="No items found" sub="Check your server connection or library" />}
+            {!loading && filteredItems.length === 0 && activeTab === 'RECENT' && <EmptyState message="No items found" sub="Check your server connection or library" />}
           </>
         )}
       </div>
@@ -188,6 +217,24 @@ const BookCard: React.FC<{ item: ABSLibraryItem, onClick: () => void, coverUrl: 
     </div>
     <h3 className="text-[13px] font-bold line-clamp-1 mb-0.5 group-hover:text-aether-purple transition-colors leading-tight uppercase tracking-tight">{item.media.metadata.title}</h3>
     <p className="text-[10px] font-black uppercase tracking-widest text-neutral-600 truncate">{item.media.metadata.authorName}</p>
+  </button>
+);
+
+const SeriesCard: React.FC<{ series: any, onClick: () => void }> = ({ series, onClick }) => (
+  <button onClick={onClick} className="flex flex-col text-left group transition-all active:scale-95 animate-fade-in">
+    <div className="aspect-[2/3] w-full bg-neutral-900 rounded-3xl overflow-hidden mb-4 relative shadow-2xl border border-white/5 group-hover:border-aether-purple/50 transition-all">
+      {series.coverUrl ? (
+        <img src={series.coverUrl} alt={series.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" loading="lazy" />
+      ) : (
+        <div className="w-full h-full flex items-center justify-center text-neutral-800">
+          <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
+        </div>
+      )}
+      <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent flex flex-col justify-end p-4">
+        <h3 className="text-[11px] font-black line-clamp-2 uppercase tracking-tight text-white leading-tight mb-1">{series.name}</h3>
+        <p className="text-[8px] font-black uppercase tracking-widest text-aether-purple drop-shadow-sm">{series.libraryItemIds.length} Books</p>
+      </div>
+    </div>
   </button>
 );
 
