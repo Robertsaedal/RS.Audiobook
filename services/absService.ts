@@ -70,7 +70,9 @@ export class ABSService {
   }
 
   async getLibraryItems(): Promise<ABSLibraryItem[]> {
-    const data = await this.fetchApi('/api/items'); // Added /api/ back
+    // We target your specific Library ID here
+    const libraryId = 'a5706742-ccbf-452a-8b7d-822988dd5f63';
+    const data = await this.fetchApi(`/api/libraries/${libraryId}/items`);
     return data.results || data;
   }
 
@@ -80,7 +82,9 @@ export class ABSService {
   }
 
   async getSeries(): Promise<ABSSeries[]> {
-    const data = await this.fetchApi('/api/series'); // Added /api/ back
+    // We target your specific Library ID here
+    const libraryId = 'a5706742-ccbf-452a-8b7d-822988dd5f63';
+    const data = await this.fetchApi(`/api/libraries/${libraryId}/series`);
     return data.results || data;
   }
 
