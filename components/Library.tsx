@@ -50,9 +50,10 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
   const processedSeries = useMemo(() => {
     const seriesMap: Record<string, ABSLibraryItem[]> = {};
     
-    // Group strictly by seriesName metadata
+    // Group strictly by seriesName metadata or series array entries
     items.forEach(item => {
-      const name = item.media.metadata.seriesName || 'Standalone';
+      // Check metadata seriesName first, then the series array if available (from include=series)
+      const name = item.media.metadata.seriesName || (item as any).series?.[0]?.name || 'Standalone';
       if (!seriesMap[name]) {
         seriesMap[name] = [];
       }
@@ -238,13 +239,13 @@ const SeriesCard: React.FC<{ series: any, onClick: () => void }> = ({ series, on
       {/* Visual Stacks (The effect of multiple books behind the first one) */}
       {!series.isStandalone && series.bookCount > 1 && (
         <>
-            <div className="absolute inset-0 bg-neutral-800 rounded-3xl translate-x-3 -translate-y-1 opacity-20 border border-white/5" />
-            <div className="absolute inset-0 bg-neutral-800 rounded-3xl translate-x-2 -translate-y-0.5 opacity-40 border border-white/5" />
+            <div className="absolute inset-0 bg-neutral-800/40 rounded-3xl translate-x-4 -translate-y-2 border border-white/10" />
+            <div className="absolute inset-0 bg-neutral-800/70 rounded-3xl translate-x-2 -translate-y-1 border border-white/10" />
         </>
       )}
 
-      {/* Main Cover */}
-      <div className="absolute inset-0 bg-neutral-900 rounded-3xl overflow-hidden shadow-2xl border border-white/5 group-hover:border-aether-purple/50 transition-all">
+      {/* Main Cover Container */}
+      <div className="absolute inset-0 bg-neutral-900 rounded-3xl overflow-hidden shadow-[0_20px_40px_rgba(0,0,0,0.6)] border border-white/5 group-hover:border-aether-purple/50 transition-all z-10">
         {series.coverUrl ? (
             <img src={series.coverUrl} alt={series.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" loading="lazy" />
         ) : (
@@ -252,18 +253,24 @@ const SeriesCard: React.FC<{ series: any, onClick: () => void }> = ({ series, on
                 <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
             </div>
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-60" />
+        
+        {/* Bottom Label Overlay (Collection/Misc) */}
+        <div className="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-black/80 via-black/20 to-transparent">
+             <p className="text-[8px] font-black uppercase tracking-[0.2em] text-aether-purple drop-shadow-sm">
+                {series.isStandalone ? 'COLLECTION' : 'COLLECTION'}
+             </p>
+        </div>
       </div>
       
-      {/* Book Count Badge (Top Right as per second reference image) */}
-      <div className="absolute top-2 right-2 bg-[#b28a47] px-2.5 py-1 rounded-lg shadow-xl z-20 border border-black/20">
-        <p className="text-[10px] font-black text-black leading-none">{series.bookCount}</p>
+      {/* Gold Book Count Badge (Top Right as per requested reference image) */}
+      <div className="absolute -top-1 -right-1 bg-[#b28a47] px-2.5 py-1 rounded-lg shadow-xl z-20 border border-black/20 transform translate-x-1 -translate-y-1">
+        <p className="text-[12px] font-black text-black leading-none">{series.bookCount}</p>
       </div>
     </div>
 
-    {/* Title below card as per second reference image */}
-    <div className="px-1 text-center">
-      <h3 className="text-[13px] font-bold line-clamp-1 group-hover:text-aether-purple transition-colors leading-tight uppercase tracking-tight text-white/90">{series.name}</h3>
+    {/* Title below card as per requested reference image */}
+    <div className="px-1 text-center mt-2">
+      <h3 className="text-[14px] font-bold line-clamp-1 group-hover:text-aether-purple transition-colors leading-tight text-white/90">{series.name}</h3>
     </div>
   </button>
 );
