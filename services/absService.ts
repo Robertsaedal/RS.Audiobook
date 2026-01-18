@@ -5,10 +5,7 @@ export class ABSService {
   private token: string;
 
   constructor(serverUrl: string, token: string) {
-    // Robustly clean the server URL: trim whitespace and remove ALL trailing slashes
     let cleanUrl = serverUrl.trim().replace(/\/+$/, '');
-    
-    // Enforce HTTPS if not explicitly provided as HTTP
     if (cleanUrl && !cleanUrl.startsWith('http')) {
       cleanUrl = `https://${cleanUrl}`;
     }
@@ -16,22 +13,13 @@ export class ABSService {
     this.token = token;
   }
 
-  /**
-   * Static login method configured for secure cross-domain authentication.
-   * Endpoint: https://rs-audio-server.duckdns.org/login
-   */
   static async login(serverUrl: string, username: string, password: string): Promise<any> {
     const envUrl = (import.meta as any).env?.VITE_ABS_URL;
-    
-    // Clean and build the base URL
     let baseUrl = (serverUrl || envUrl || 'rs-audio-server.duckdns.org').trim().replace(/\/+$/, '');
-    
-    // Ensure protocol is https for duckdns security
     if (!baseUrl.startsWith('http')) {
       baseUrl = `https://${baseUrl}`;
     }
 
-    // Removed /api/ to match your working login test
     const endpoint = `${baseUrl}/login`;
 
     const response = await fetch(endpoint, {
@@ -56,7 +44,6 @@ export class ABSService {
   }
 
   private async fetchApi(endpoint: string, options: RequestInit = {}) {
-    // Ensure endpoint starts with a slash, but we've removed the /api prefix
     const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
     const url = `${this.serverUrl}${path}`;
 
@@ -80,25 +67,21 @@ export class ABSService {
   }
 
   async getLibraryItems(): Promise<ABSLibraryItem[]> {
-    // Removed /api prefix
     const data = await this.fetchApi('/items');
     return data.results || data;
   }
 
   async getItemDetails(id: string): Promise<ABSLibraryItem> {
-    // Removed /api prefix
     return this.fetchApi(`/items/${id}`);
   }
 
   async getSeries(): Promise<ABSSeries[]> {
-    // Removed /api prefix
     const data = await this.fetchApi('/series');
     return data.results || data;
   }
 
   async getProgress(itemId: string): Promise<ABSProgress | null> {
     try {
-      // Removed /api prefix
       return await this.fetchApi(`/me/progress/${itemId}`);
     } catch (e) {
       return null;
@@ -107,7 +90,6 @@ export class ABSService {
 
   async saveProgress(itemId: string, currentTime: number, duration: number): Promise<void> {
     try {
-      // Removed /api prefix
       await this.fetchApi(`/me/progress/${itemId}`, {
         method: 'PATCH',
         body: JSON.stringify({
@@ -123,6 +105,10 @@ export class ABSService {
   }
 
   getAudioUrl(itemId: string, audioFileId: string): string {
-    // Removed /api prefix
     return `${this.serverUrl}/items/${itemId}/audio/${audioFileId}?token=${this.token}`;
   }
+
+  getCoverUrl(itemId: string): string {
+    return `${this.serverUrl}/items/${itemId}/cover?token=${this.token}`;
+  }
+} // <--- Make sure this final bracket is included!
