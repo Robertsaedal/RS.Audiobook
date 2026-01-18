@@ -18,7 +18,7 @@ export class ABSService {
 
   /**
    * Static login method configured for secure cross-domain authentication.
-   * Endpoint: https://rs-audio-server.duckdns.org/api/login
+   * Endpoint: https://rs-audio-server.duckdns.org/login
    */
   static async login(serverUrl: string, username: string, password: string): Promise<any> {
     const envUrl = (import.meta as any).env?.VITE_ABS_URL;
@@ -31,14 +31,15 @@ export class ABSService {
       baseUrl = `https://${baseUrl}`;
     }
 
-    const endpoint = `${baseUrl}/api/login`;
+    // Removed /api/ to match your working login test
+    const endpoint = `${baseUrl}/login`;
 
     const response = await fetch(endpoint, {
       method: 'POST',
-      mode: 'cors',           // Explicitly allow CORS
-      credentials: 'include', // Ensure cookies/sessions are sent correctly
+      mode: 'cors',
+      credentials: 'include',
       headers: {
-        'Content-Type': 'application/json' // Keep headers simple to avoid preflight issues
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({ 
         username: username.trim(), 
@@ -55,6 +56,7 @@ export class ABSService {
   }
 
   private async fetchApi(endpoint: string, options: RequestInit = {}) {
+    // Ensure endpoint starts with a slash, but we've removed the /api prefix
     const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
     const url = `${this.serverUrl}${path}`;
 
@@ -78,22 +80,26 @@ export class ABSService {
   }
 
   async getLibraryItems(): Promise<ABSLibraryItem[]> {
-    const data = await this.fetchApi('/api/items');
+    // Removed /api prefix
+    const data = await this.fetchApi('/items');
     return data.results || data;
   }
 
   async getItemDetails(id: string): Promise<ABSLibraryItem> {
-    return this.fetchApi(`/api/items/${id}`);
+    // Removed /api prefix
+    return this.fetchApi(`/items/${id}`);
   }
 
   async getSeries(): Promise<ABSSeries[]> {
-    const data = await this.fetchApi('/api/series');
+    // Removed /api prefix
+    const data = await this.fetchApi('/series');
     return data.results || data;
   }
 
   async getProgress(itemId: string): Promise<ABSProgress | null> {
     try {
-      return await this.fetchApi(`/api/me/progress/${itemId}`);
+      // Removed /api prefix
+      return await this.fetchApi(`/me/progress/${itemId}`);
     } catch (e) {
       return null;
     }
@@ -101,7 +107,8 @@ export class ABSService {
 
   async saveProgress(itemId: string, currentTime: number, duration: number): Promise<void> {
     try {
-      await this.fetchApi(`/api/me/progress/${itemId}`, {
+      // Removed /api prefix
+      await this.fetchApi(`/me/progress/${itemId}`, {
         method: 'PATCH',
         body: JSON.stringify({
           currentTime,
@@ -116,10 +123,6 @@ export class ABSService {
   }
 
   getAudioUrl(itemId: string, audioFileId: string): string {
-    return `${this.serverUrl}/api/items/${itemId}/audio/${audioFileId}?token=${this.token}`;
+    // Removed /api prefix
+    return `${this.serverUrl}/items/${itemId}/audio/${audioFileId}?token=${this.token}`;
   }
-
-  getCoverUrl(itemId: string): string {
-    return `${this.serverUrl}/api/items/${itemId}/cover?token=${this.token}`;
-  }
-}
