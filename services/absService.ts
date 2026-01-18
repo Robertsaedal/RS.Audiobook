@@ -86,7 +86,7 @@ export class ABSService {
 
   async getLibraryItems(): Promise<ABSLibraryItem[]> {
     const libId = await this.ensureLibraryId();
-    // Added include=series to ensure we have series metadata for grouping
+    // Include series for proper grouping and progress for current time
     const data = await this.fetchApi(`/api/libraries/${libId}/items?include=series,progress`);
     return data?.results || data || [];
   }
