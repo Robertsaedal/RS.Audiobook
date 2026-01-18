@@ -1,9 +1,10 @@
+
 import { ABSUser, ABSLibraryItem, ABSSeries, ABSProgress } from '../types';
 
 export class ABSService {
   private serverUrl: string;
   private token: string;
-  private libraryId = 'a5706742-ccbf-452a-8b7d-822988dd5f63';
+  private libraryId: string | null = null;
 
   constructor(serverUrl: string, token: string) {
     let cleanUrl = serverUrl.trim().replace(/\/+$/, '');
@@ -15,15 +16,12 @@ export class ABSService {
   }
 
   static async login(serverUrl: string, username: string, password: string): Promise<any> {
-    const envUrl = (import.meta as any).env?.VITE_ABS_URL;
-    let baseUrl = (serverUrl || envUrl || 'rs-audio-server.duckdns.org').trim().replace(/\/+$/, '');
+    let baseUrl = serverUrl.trim().replace(/\/+$/, '').replace(/\/api$/, '');
     if (!baseUrl.startsWith('http')) {
       baseUrl = `https://${baseUrl}`;
     }
 
-    const endpoint = `${baseUrl}/login`;
-
-    const response = await fetch(endpoint, {
+    const response = await fetch(`${baseUrl}/login`, {
       method: 'POST',
       mode: 'cors',
       headers: { 'Content-Type': 'application/json' },
@@ -35,7 +33,7 @@ export class ABSService {
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => 'Unknown Error');
-      throw new Error(`Login failed (${response.status}): ${errorText}`);
+      throw new Error(`Login failed: ${errorText}`);
     }
 
     return response.json();
@@ -56,13 +54,11 @@ export class ABSService {
     });
 
     if (!response.ok) {
-      // If it's a 404 for progress, don't throw, just return null
       if (response.status === 404) return null;
       const errorText = await response.text().catch(() => 'Error');
       throw new Error(`ABS API Error (${response.status}): ${errorText}`);
     }
 
-    // Safely handle empty responses or non-JSON responses
     const contentType = response.headers.get("content-type");
     if (contentType && contentType.includes("application/json")) {
       return response.json();
@@ -70,8 +66,21 @@ export class ABSService {
     return response.text();
   }
 
+  async ensureLibraryId(): Promise<string> {
+    if (this.libraryId) return this.libraryId;
+    
+    const data = await this.fetchApi('/api/libraries');
+    const libraries = data?.libraries || data || [];
+    const audioLibrary = libraries.find((l: any) => l.mediaType === 'audiobook') || libraries[0];
+    
+    if (!audioLibrary) throw new Error("No libraries found on server");
+    this.libraryId = audioLibrary.id;
+    return this.libraryId!;
+  }
+
   async getLibraryItems(): Promise<ABSLibraryItem[]> {
-    const data = await this.fetchApi(`/api/libraries/${this.libraryId}/items?include=progress`);
+    const libId = await this.ensureLibraryId();
+    const data = await this.fetchApi(`/api/libraries/${libId}/items?include=progress`);
     return data?.results || data || [];
   }
 
@@ -80,24 +89,22 @@ export class ABSService {
   }
 
   async getSeries(): Promise<ABSSeries[]> {
-    const data = await this.fetchApi(`/api/libraries/${this.libraryId}/series`);
+    const libId = await this.ensureLibraryId();
+    const data = await this.fetchApi(`/api/libraries/${libId}/series`);
     return data?.results || (Array.isArray(data) ? data : []);
   }
 
   async getProgress(id: string): Promise<any> {
     try {
-      // fetchApi now handles the 404 internally
-      return await this.fetchApi(`/api/users/me/progress/${id}`);
+      const res = await this.fetchApi(`/api/users/me/progress/${id}`);
+      return res;
     } catch (e) {
-      console.warn("Could not fetch progress:", e);
       return null;
     }
   }
 
   async saveProgress(itemId: string, currentTime: number, duration: number): Promise<void> {
     const url = `${this.serverUrl}/api/users/me/progress/${itemId}`;
-    
-    // We use a "fire and forget" approach for progress updates to keep the UI snappy
     fetch(url, {
       method: 'PATCH',
       mode: 'cors',
@@ -111,8 +118,8 @@ export class ABSService {
         progress: duration > 0 ? currentTime / duration : 0,
         isFinished: currentTime >= duration - 10 && duration > 0,
       }),
-      keepalive: true // Helps save progress even if the user closes the tab
-    }).catch(err => console.error("Sync error:", err));
+      keepalive: true
+    }).catch(() => {});
   }
 
   getAudioUrl(itemId: string, audioFileId: string): string {
