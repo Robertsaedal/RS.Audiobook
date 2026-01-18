@@ -11,6 +11,7 @@ interface LibraryProps {
 
 const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
   const [items, setItems] = useState<ABSLibraryItem[]>([]);
+  const [history, setHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'RECENT' | 'SERIES' | 'HISTORY'>('RECENT');
   const [searchTerm, setSearchTerm] = useState('');
@@ -18,26 +19,54 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
 
   const absService = useMemo(() => new ABSService(auth.serverUrl, auth.user?.token || ''), [auth]);
 
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const [libraryItems, userHistory] = await Promise.all([
+        absService.getLibraryItems(),
+        absService.getUserHistory()
+      ]);
+      setItems(libraryItems);
+      setHistory(userHistory);
+    } catch (e) {
+      console.error("Fetch failed", e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        const libraryItems = await absService.getLibraryItems();
-        setItems(libraryItems);
-      } catch (e) {
-        console.error("Fetch failed", e);
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchData();
   }, [absService]);
 
-  const historyItems = useMemo(() => {
-    const savedHistory = JSON.parse(localStorage.getItem('rs_history') || '[]');
-    return items.filter(book => savedHistory.includes(book.id))
-      .sort((a, b) => savedHistory.indexOf(b.id) - savedHistory.indexOf(a.id));
+  // CONTINUE LISTENING: Find the most recent unfinished book
+  const continueListeningItem = useMemo(() => {
+    return items
+      .filter(item => {
+        const progress = (item as any).userProgress;
+        return progress && !progress.isFinished && progress.currentTime > 0;
+      })
+      .sort((a, b) => {
+        const progA = (a as any).userProgress?.lastUpdate || 0;
+        const progB = (b as any).userProgress?.lastUpdate || 0;
+        return progB - progA;
+      })[0];
   }, [items]);
+
+  // HISTORY ITEMS: Populate from server history mapping to library items
+  const historyItems = useMemo(() => {
+    if (!history.length) return [];
+    // Map history sessions to our actual library items
+    const itemMap = new Map(items.map(i => [i.id, i]));
+    const uniqueIds = new Set();
+    return history
+      .map(session => itemMap.get(session.libraryItemId || session.itemId))
+      .filter(item => {
+        if (!item || uniqueIds.has(item.id)) return false;
+        uniqueIds.add(item.id);
+        return true;
+      }) as ABSLibraryItem[];
+  }, [history, items]);
 
   const filteredItems = useMemo(() => {
     return items.filter(item => 
@@ -46,7 +75,6 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
     );
   }, [items, searchTerm]);
 
-  // THE GROUPING LOGIC: Use reduce on libraryItems grouped by seriesName
   const seriesGroups = useMemo(() => {
     const grouped = items.reduce((acc: Record<string, ABSLibraryItem[]>, item) => {
       const sName = item.media.metadata.seriesName;
@@ -60,16 +88,13 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
       return acc;
     }, {});
 
-    // Transform map into array of folder objects
     return Object.entries(grouped).map(([name, groupItems]) => {
-      // SEQUENCE SORTING: Sort by parseInt of sequence
       const sorted = [...groupItems].sort((a, b) => {
         const seqA = parseInt(a.media.metadata.sequence || '0', 10);
         const seqB = parseInt(b.media.metadata.sequence || '0', 10);
         return seqA - seqB;
       });
 
-      // VISUAL: Use the cover of Book #1 (sequence 1) or the first in sorted list
       const book1 = sorted.find(i => parseInt(i.media.metadata.sequence || '0', 10) === 1) || sorted[0];
 
       return {
@@ -89,9 +114,6 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
   }, [seriesGroups, searchTerm]);
 
   const handleBookSelect = (item: ABSLibraryItem) => {
-    const savedHistory = JSON.parse(localStorage.getItem('rs_history') || '[]');
-    const newHistory = [item.id, ...savedHistory.filter((id: string) => id !== item.id)].slice(0, 20);
-    localStorage.setItem('rs_history', JSON.stringify(newHistory));
     onSelectItem(item);
   };
 
@@ -149,25 +171,55 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
         ) : (
           <>
             {activeTab === 'RECENT' && (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-6 gap-y-10">
-                {filteredItems.map(item => (
-                  <BookCard key={item.id} item={item} onClick={() => handleBookSelect(item)} coverUrl={absService.getCoverUrl(item.id)} />
-                ))}
+              <div className="space-y-10">
+                {/* CONTINUE LISTENING SECTION */}
+                {!searchTerm && continueListeningItem && (
+                  <div className="animate-fade-in">
+                    <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-neutral-600 mb-6">Continue Listening</h3>
+                    <div 
+                      onClick={() => handleBookSelect(continueListeningItem)}
+                      className="group relative w-full aspect-[21/9] bg-neutral-900 rounded-[32px] overflow-hidden border border-white/5 cursor-pointer hover:border-aether-purple/50 transition-all active:scale-[0.98] shadow-2xl"
+                    >
+                      <img 
+                        src={absService.getCoverUrl(continueListeningItem.id)} 
+                        alt="Resume" 
+                        className="absolute inset-0 w-full h-full object-cover opacity-40 group-hover:scale-105 transition-transform duration-1000"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-r from-black via-black/60 to-transparent" />
+                      <div className="absolute inset-y-0 left-0 p-8 flex flex-col justify-center max-w-[70%]">
+                        <span className="text-[9px] font-black uppercase tracking-[0.3em] text-aether-purple mb-2">RESUME SESSION</span>
+                        <h4 className="text-xl font-black uppercase tracking-tight text-white mb-1 line-clamp-1">{continueListeningItem.media.metadata.title}</h4>
+                        <p className="text-[10px] font-black text-neutral-400 uppercase tracking-widest">{continueListeningItem.media.metadata.authorName}</p>
+                      </div>
+                      <div className="absolute right-8 top-1/2 -translate-y-1/2 w-14 h-14 gradient-aether rounded-full flex items-center justify-center shadow-aether-glow">
+                        <svg className="w-6 h-6 text-white translate-x-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="animate-fade-in">
+                  <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-neutral-600 mb-6">Your Library</h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-6 gap-y-10">
+                    {filteredItems.map(item => (
+                      <BookCard key={item.id} item={item} onClick={() => handleBookSelect(item)} coverUrl={absService.getCoverUrl(item.id)} />
+                    ))}
+                  </div>
+                </div>
               </div>
             )}
 
             {activeTab === 'HISTORY' && (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-10">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-6 gap-y-10">
                 {historyItems.length > 0 ? historyItems.map(item => (
                   <BookCard key={item.id} item={item} onClick={() => handleBookSelect(item)} isHistory coverUrl={absService.getCoverUrl(item.id)} />
-                )) : <EmptyState message="No History Yet" />}
+                )) : <EmptyState message="No History Found" />}
               </div>
             )}
 
             {activeTab === 'SERIES' && (
               <>
                 {selectedSeries ? (
-                  // SUB-GRID: Show books in specific series ordered by sequence
                   <div className="animate-fade-in">
                     <button onClick={() => setSelectedSeries(null)} className="flex items-center gap-2 text-aether-purple mb-6 text-[10px] font-black uppercase tracking-widest active:scale-95">
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M15 19l-7-7 7-7"/></svg>
@@ -184,7 +236,6 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
                     </div>
                   </div>
                 ) : (
-                  // SERIES GRID: Renders Series Folders
                   <SeriesGrid groups={filteredSeries} onSelect={setSelectedSeries} />
                 )}
               </>
@@ -207,14 +258,9 @@ const SeriesGrid: React.FC<{ groups: any[], onSelect: (group: any) => void }> = 
   </div>
 );
 
-/**
- * THE 'STACK' UI COMPONENT: Visual effect with 4px/8px shifts
- */
 const SeriesStackCard: React.FC<{ group: any, onClick: () => void }> = ({ group, onClick }) => (
   <button onClick={onClick} className="flex flex-col text-left group transition-all active:scale-95 animate-fade-in relative">
     <div className="aspect-[2/3] w-full mb-4 relative">
-      
-      {/* THE STACK EFFECT: Layered divs behind cover shifted 4px and 8px */}
       {group.bookCount > 1 && (
         <>
           <div 
@@ -227,8 +273,6 @@ const SeriesStackCard: React.FC<{ group: any, onClick: () => void }> = ({ group,
           />
         </>
       )}
-
-      {/* Main Front Cover Container */}
       <div className="absolute inset-0 bg-neutral-900 rounded-3xl overflow-hidden shadow-[0_20px_40px_rgba(0,0,0,0.6)] border border-white/5 group-hover:border-aether-purple/50 transition-all z-10">
         <img 
           src={group.coverUrl} 
@@ -240,41 +284,49 @@ const SeriesStackCard: React.FC<{ group: any, onClick: () => void }> = ({ group,
              <p className="text-[8px] font-black uppercase tracking-[0.2em] text-aether-purple drop-shadow-sm">COLLECTION</p>
         </div>
       </div>
-      
-      {/* THE BADGE: Total books in series (Top-Right) */}
       <div className="absolute -top-2 -right-2 bg-[#b28a47] w-9 h-9 flex items-center justify-center rounded-full shadow-2xl z-20 border border-black/30 transform translate-x-1 -translate-y-1">
         <p className="text-[14px] font-black text-black leading-none">{group.bookCount}</p>
       </div>
     </div>
-
-    {/* LABEL: Only show Series Name */}
     <div className="px-1 text-center mt-2">
       <h3 className="text-[14px] font-bold line-clamp-1 group-hover:text-aether-purple transition-colors leading-tight text-white/90 uppercase tracking-tight">{group.name}</h3>
     </div>
   </button>
 );
 
-const BookCard: React.FC<{ item: ABSLibraryItem, onClick: () => void, coverUrl: string, isHistory?: boolean, showSequence?: boolean }> = ({ item, onClick, coverUrl, isHistory, showSequence }) => (
-  <button onClick={onClick} className="flex flex-col text-left group transition-all active:scale-95 animate-fade-in">
-    <div className="aspect-[2/3] w-full bg-neutral-900 rounded-3xl overflow-hidden mb-4 relative shadow-2xl border border-white/5 group-hover:border-aether-purple/50 transition-all">
-      <img src={coverUrl} alt={item.media.metadata.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" loading="lazy" />
-      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-80" />
-      
-      {item.media.metadata.sequence && (
-        <div className="absolute top-3 left-3 bg-aether-purple px-2 py-0.5 rounded-lg border border-white/20 shadow-xl z-10">
-          <span className="text-[9px] font-black text-white">#{item.media.metadata.sequence}</span>
-        </div>
-      )}
-    </div>
-    <div className="px-1">
-        <h3 className="text-[13px] font-bold line-clamp-1 mb-0.5 group-hover:text-aether-purple transition-colors leading-tight uppercase tracking-tight">{item.media.metadata.title}</h3>
-        <p className="text-[10px] font-black uppercase tracking-widest text-neutral-600 truncate">{item.media.metadata.authorName}</p>
-        {showSequence && item.media.metadata.sequence && (
-            <p className="text-[9px] font-black text-aether-purple uppercase tracking-[0.2em] mt-1">Volume {item.media.metadata.sequence}</p>
+const BookCard: React.FC<{ item: ABSLibraryItem, onClick: () => void, coverUrl: string, isHistory?: boolean, showSequence?: boolean }> = ({ item, onClick, coverUrl, isHistory, showSequence }) => {
+  // Check progress for "Finished" status
+  const isFinished = (item as any).userProgress?.isFinished === true;
+
+  return (
+    <button onClick={onClick} className="flex flex-col text-left group transition-all active:scale-95 animate-fade-in">
+      <div className="aspect-[2/3] w-full bg-neutral-900 rounded-3xl overflow-hidden mb-4 relative shadow-2xl border border-white/5 group-hover:border-aether-purple/50 transition-all">
+        <img src={coverUrl} alt={item.media.metadata.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" loading="lazy" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-80" />
+        
+        {/* FINISHED BADGE */}
+        {isFinished && (
+          <div className="absolute top-3 right-3 bg-green-500 w-6 h-6 rounded-full flex items-center justify-center border border-black/20 shadow-xl z-10 animate-pulse">
+            <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={4} d="M5 13l4 4L19 7"/></svg>
+          </div>
         )}
-    </div>
-  </button>
-);
+
+        {item.media.metadata.sequence && (
+          <div className="absolute top-3 left-3 bg-aether-purple px-2 py-0.5 rounded-lg border border-white/20 shadow-xl z-10">
+            <span className="text-[9px] font-black text-white">#{item.media.metadata.sequence}</span>
+          </div>
+        )}
+      </div>
+      <div className="px-1">
+          <h3 className="text-[13px] font-bold line-clamp-1 mb-0.5 group-hover:text-aether-purple transition-colors leading-tight uppercase tracking-tight">{item.media.metadata.title}</h3>
+          <p className="text-[10px] font-black uppercase tracking-widest text-neutral-600 truncate">{item.media.metadata.authorName}</p>
+          {showSequence && item.media.metadata.sequence && (
+              <p className="text-[9px] font-black text-aether-purple uppercase tracking-[0.2em] mt-1">Volume {item.media.metadata.sequence}</p>
+          )}
+      </div>
+    </button>
+  );
+};
 
 const EmptyState = ({ message, sub }: { message: string, sub?: string }) => (
   <div className="col-span-full flex flex-col items-center justify-center py-20 text-center animate-fade-in">
