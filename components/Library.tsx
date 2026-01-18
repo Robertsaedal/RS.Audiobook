@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState, useMemo } from 'react';
 import { AuthState, ABSLibraryItem, ABSSeries } from '../types';
 import { ABSService } from '../services/absService';
@@ -69,7 +68,7 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
       <div className="px-6 pt-4 space-y-4 shrink-0">
         <div className="flex justify-between items-center">
           <div>
-            <h2 className="text-2xl font-black tracking-tight text-aether-purple drop-shadow-[0_0_10px_rgba(157,80,187,0.4)]">R.S AUDIOBOOKS</h2>
+            <h2 className="text-2xl font-black tracking-tight text-aether-purple drop-shadow-aether-glow">R.S AUDIOBOOKS</h2>
             <p className="text-[8px] uppercase tracking-[0.4em] text-neutral-600 font-black">Digital Audiobookshelf</p>
           </div>
           <button onClick={onLogout} className="text-[10px] font-black uppercase tracking-widest text-neutral-600 hover:text-white transition-colors">
@@ -104,7 +103,7 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
           >
             {tab.label}
             {activeTab === tab.id && (
-              <div className="absolute bottom-0 left-0 w-full h-0.5 gradient-aether shadow-[0_0_15px_#9D50BB] animate-pulse" />
+              <div className="absolute bottom-0 left-0 w-full h-0.5 gradient-aether shadow-aether-glow animate-pulse" />
             )}
           </button>
         ))}
@@ -172,13 +171,6 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
           </>
         )}
       </div>
-
-      <style dangerouslySetInnerHTML={{ __html: `
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        @keyframes fade-in { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: translateX(0); } }
-        .animate-fade-in { animation: fade-in 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; }
-      `}} />
     </div>
   );
 };
