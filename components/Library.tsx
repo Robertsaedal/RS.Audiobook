@@ -78,7 +78,7 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
         isStandalone: name === 'Standalone'
       };
     }).sort((a, b) => {
-      // Sort the grid alphabetical, keeping Standalone at the end
+      // Sort alphabetical, keeping Standalone at the end
       if (a.isStandalone) return 1;
       if (b.isStandalone) return -1;
       return a.name.localeCompare(b.name);
@@ -158,7 +158,7 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
         ) : (
           <>
             {activeTab === 'RECENT' && (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-8">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-6 gap-y-10">
                 {filteredItems.map(item => (
                   <BookCard key={item.id} item={item} onClick={() => handleBookSelect(item)} coverUrl={absService.getCoverUrl(item.id)} />
                 ))}
@@ -166,7 +166,7 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
             )}
 
             {activeTab === 'HISTORY' && (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-8">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-10">
                 {historyItems.length > 0 ? historyItems.map(item => (
                   <BookCard key={item.id} item={item} onClick={() => handleBookSelect(item)} isHistory coverUrl={absService.getCoverUrl(item.id)} />
                 )) : <EmptyState message="No History Yet" />}
@@ -185,14 +185,14 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
                       <h3 className="text-2xl font-black uppercase tracking-tight text-white leading-tight mb-2">{selectedSeries.name}</h3>
                       <p className="text-[10px] font-black text-neutral-600 uppercase tracking-[0.3em]">{selectedSeries.bookCount} {selectedSeries.bookCount === 1 ? 'Book' : 'Books'} Total</p>
                     </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-8">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-6 gap-y-10">
                       {selectedSeries.items.map((item: ABSLibraryItem) => (
                         <BookCard key={item.id} item={item} onClick={() => handleBookSelect(item)} coverUrl={absService.getCoverUrl(item.id)} showSequence />
                       ))}
                     </div>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-8">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-6 gap-y-10">
                     {filteredSeriesList.map(s => (
                       <SeriesCard key={s.id} series={s} onClick={() => setSelectedSeries(s)} />
                     ))}
@@ -220,37 +220,50 @@ const BookCard: React.FC<{ item: ABSLibraryItem, onClick: () => void, coverUrl: 
           <span className="text-[9px] font-black text-white">#{item.media.metadata.sequence}</span>
         </div>
       )}
-
-      {showSequence && item.media.metadata.sequence && (
-        <div className="absolute bottom-3 left-3 right-3 bg-black/60 backdrop-blur-md px-2 py-1.5 rounded-xl border border-white/5">
-          <p className="text-[8px] font-black text-aether-purple uppercase tracking-[0.2em] text-center">Book {item.media.metadata.sequence}</p>
-        </div>
-      )}
     </div>
-    <h3 className="text-[13px] font-bold line-clamp-1 mb-0.5 group-hover:text-aether-purple transition-colors leading-tight uppercase tracking-tight">{item.media.metadata.title}</h3>
-    <p className="text-[10px] font-black uppercase tracking-widest text-neutral-600 truncate">{item.media.metadata.authorName}</p>
+    <div className="px-1">
+        <h3 className="text-[13px] font-bold line-clamp-1 mb-0.5 group-hover:text-aether-purple transition-colors leading-tight uppercase tracking-tight">{item.media.metadata.title}</h3>
+        <p className="text-[10px] font-black uppercase tracking-widest text-neutral-600 truncate">{item.media.metadata.authorName}</p>
+        {showSequence && item.media.metadata.sequence && (
+            <p className="text-[9px] font-black text-aether-purple uppercase tracking-[0.2em] mt-1">Book {item.media.metadata.sequence}</p>
+        )}
+    </div>
   </button>
 );
 
 const SeriesCard: React.FC<{ series: any, onClick: () => void }> = ({ series, onClick }) => (
   <button onClick={onClick} className="flex flex-col text-left group transition-all active:scale-95 animate-fade-in">
-    <div className="aspect-[2/3] w-full bg-neutral-900 rounded-3xl overflow-hidden mb-4 relative shadow-2xl border border-white/5 group-hover:border-aether-purple/50 transition-all">
-      {series.coverUrl ? (
-        <img src={series.coverUrl} alt={series.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" loading="lazy" />
-      ) : (
-        <div className="w-full h-full flex items-center justify-center text-neutral-800">
-          <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
-        </div>
-      )}
+    <div className="aspect-[2/3] w-full mb-4 relative transition-all">
       
-      <div className="absolute top-3 right-3 bg-white/10 backdrop-blur-md px-2 py-1 rounded-xl border border-white/10 shadow-lg">
-        <p className="text-[8px] font-black text-white uppercase tracking-widest">{series.bookCount} {series.bookCount === 1 ? 'Book' : 'Books'}</p>
-      </div>
+      {/* Visual Stacks (The effect of multiple books behind the first one) */}
+      {!series.isStandalone && series.bookCount > 1 && (
+        <>
+            <div className="absolute inset-0 bg-neutral-800 rounded-3xl translate-x-3 -translate-y-1 opacity-20 border border-white/5" />
+            <div className="absolute inset-0 bg-neutral-800 rounded-3xl translate-x-2 -translate-y-0.5 opacity-40 border border-white/5" />
+        </>
+      )}
 
-      <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent flex flex-col justify-end p-5">
-        <h3 className="text-[12px] font-black line-clamp-2 uppercase tracking-tight text-white leading-tight mb-1">{series.name}</h3>
-        <p className="text-[8px] font-black uppercase tracking-[0.2em] text-aether-purple drop-shadow-sm">{series.isStandalone ? 'Misc' : 'Collection'}</p>
+      {/* Main Cover */}
+      <div className="absolute inset-0 bg-neutral-900 rounded-3xl overflow-hidden shadow-2xl border border-white/5 group-hover:border-aether-purple/50 transition-all">
+        {series.coverUrl ? (
+            <img src={series.coverUrl} alt={series.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" loading="lazy" />
+        ) : (
+            <div className="w-full h-full flex items-center justify-center text-neutral-800">
+                <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
+            </div>
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-60" />
       </div>
+      
+      {/* Book Count Badge (Top Right as per second reference image) */}
+      <div className="absolute top-2 right-2 bg-[#b28a47] px-2.5 py-1 rounded-lg shadow-xl z-20 border border-black/20">
+        <p className="text-[10px] font-black text-black leading-none">{series.bookCount}</p>
+      </div>
+    </div>
+
+    {/* Title below card as per second reference image */}
+    <div className="px-1 text-center">
+      <h3 className="text-[13px] font-bold line-clamp-1 group-hover:text-aether-purple transition-colors leading-tight uppercase tracking-tight text-white/90">{series.name}</h3>
     </div>
   </button>
 );
