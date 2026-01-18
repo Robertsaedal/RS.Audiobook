@@ -46,15 +46,15 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
     );
   }, [items, searchTerm]);
 
-  // STACKED SERIES GROUPING LOGIC
+  // STACKED SERIES TRANSFORMATION LOGIC
   const seriesGroups = useMemo(() => {
     const seriesMap: Record<string, ABSLibraryItem[]> = {};
     
     items.forEach(item => {
-      // Use metadata seriesName OR fallback to the first entry in the series array
+      // 1. Strict Metadata Check: Use seriesName or fallback to item.series array
       const sName = item.media.metadata.seriesName || (item as any).series?.[0]?.name;
       
-      // Skip if no series name is present
+      // 2. Filter: If a book has no series name, do not show it in this tab
       if (!sName) return;
 
       if (!seriesMap[sName]) {
@@ -64,7 +64,7 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
     });
 
     return Object.entries(seriesMap).map(([name, groupItems]) => {
-      // Sort items within this series by their sequence number
+      // 3. Internal Sorting: Sort books by sequence number
       const sorted = [...groupItems].sort((a, b) => {
         const seqA = parseFloat(a.media.metadata.sequence || '0');
         const seqB = parseFloat(b.media.metadata.sequence || '0');
@@ -76,20 +76,16 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
         name: name,
         items: sorted,
         bookCount: sorted.length,
-        // The first book in the sorted list provides the primary cover
+        // Main cover is from Sequence 1 (or the first available after sorting)
         coverUrl: absService.getCoverUrl(sorted[0].id)
       };
     }).sort((a, b) => a.name.localeCompare(b.name));
   }, [items, absService]);
 
-  // Filter series for search bar
   const filteredSeries = useMemo(() => {
     const term = searchTerm.toLowerCase();
     if (!term) return seriesGroups;
-    return seriesGroups.filter(g => 
-      g.name.toLowerCase().includes(term) ||
-      g.items.some(i => i.media.metadata.title.toLowerCase().includes(term))
-    );
+    return seriesGroups.filter(g => g.name.toLowerCase().includes(term));
   }, [seriesGroups, searchTerm]);
 
   const handleBookSelect = (item: ABSLibraryItem) => {
@@ -178,7 +174,7 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
                     </button>
                     <div className="mb-10">
                       <h3 className="text-2xl font-black uppercase tracking-tight text-white leading-tight mb-2">{selectedSeries.name}</h3>
-                      <p className="text-[10px] font-black text-neutral-600 uppercase tracking-[0.3em]">{selectedSeries.bookCount} {selectedSeries.bookCount === 1 ? 'Book' : 'Books'} in this collection</p>
+                      <p className="text-[10px] font-black text-neutral-600 uppercase tracking-[0.3em]">{selectedSeries.bookCount} {selectedSeries.bookCount === 1 ? 'Book' : 'Books'} in order</p>
                     </div>
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-6 gap-y-10">
                       {selectedSeries.items.map((item: ABSLibraryItem) => (
@@ -187,11 +183,7 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
                     </div>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-6 gap-y-12">
-                    {filteredSeries.map(group => (
-                      <SeriesStackCard key={group.id} group={group} onClick={() => setSelectedSeries(group)} />
-                    ))}
-                  </div>
+                  <SeriesGrid groups={filteredSeries} onSelect={setSelectedSeries} />
                 )}
               </>
             )}
@@ -203,6 +195,50 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
     </div>
   );
 };
+
+// NEW: Refactored SeriesGrid and SeriesStackCard to match visual reference image
+const SeriesGrid: React.FC<{ groups: any[], onSelect: (group: any) => void }> = ({ groups, onSelect }) => (
+  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-6 gap-y-12">
+    {groups.map(group => (
+      <SeriesStackCard key={group.id} group={group} onClick={() => onSelect(group)} />
+    ))}
+  </div>
+);
+
+const SeriesStackCard: React.FC<{ group: any, onClick: () => void }> = ({ group, onClick }) => (
+  <button onClick={onClick} className="flex flex-col text-left group transition-all active:scale-95 animate-fade-in">
+    <div className="aspect-[2/3] w-full mb-4 relative">
+      
+      {/* Visual Folder Stack (Book layers behind the main one) */}
+      {group.bookCount > 1 && (
+        <>
+          <div className="absolute inset-0 bg-neutral-800/40 rounded-3xl translate-x-4 -translate-y-2 border border-white/10" />
+          <div className="absolute inset-0 bg-neutral-800/70 rounded-3xl translate-x-2 -translate-y-1 border border-white/10" />
+        </>
+      )}
+
+      {/* Front Cover Container */}
+      <div className="absolute inset-0 bg-neutral-900 rounded-3xl overflow-hidden shadow-[0_20px_40px_rgba(0,0,0,0.6)] border border-white/5 group-hover:border-aether-purple/50 transition-all z-10">
+        <img src={group.coverUrl} alt={group.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" loading="lazy" />
+        
+        {/* Collection Branding Overlay */}
+        <div className="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-black/80 via-black/20 to-transparent">
+             <p className="text-[8px] font-black uppercase tracking-[0.2em] text-aether-purple drop-shadow-sm">COLLECTION</p>
+        </div>
+      </div>
+      
+      {/* Gold Circular Badge (Top Right as per second image) */}
+      <div className="absolute -top-1 -right-1 bg-[#b28a47] w-8 h-8 flex items-center justify-center rounded-full shadow-2xl z-20 border border-black/20 transform translate-x-1 -translate-y-1">
+        <p className="text-[14px] font-black text-black leading-none">{group.bookCount}</p>
+      </div>
+    </div>
+
+    {/* Label: Only show Series Name below card */}
+    <div className="px-1 text-center mt-2">
+      <h3 className="text-[14px] font-bold line-clamp-1 group-hover:text-aether-purple transition-colors leading-tight text-white/90 uppercase tracking-tight">{group.name}</h3>
+    </div>
+  </button>
+);
 
 const BookCard: React.FC<{ item: ABSLibraryItem, onClick: () => void, coverUrl: string, isHistory?: boolean, showSequence?: boolean }> = ({ item, onClick, coverUrl, isHistory, showSequence }) => (
   <button onClick={onClick} className="flex flex-col text-left group transition-all active:scale-95 animate-fade-in">
@@ -222,47 +258,6 @@ const BookCard: React.FC<{ item: ABSLibraryItem, onClick: () => void, coverUrl: 
         {showSequence && item.media.metadata.sequence && (
             <p className="text-[9px] font-black text-aether-purple uppercase tracking-[0.2em] mt-1">Book {item.media.metadata.sequence}</p>
         )}
-    </div>
-  </button>
-);
-
-const SeriesStackCard: React.FC<{ group: any, onClick: () => void }> = ({ group, onClick }) => (
-  <button onClick={onClick} className="flex flex-col text-left group transition-all active:scale-95 animate-fade-in">
-    <div className="aspect-[2/3] w-full mb-4 relative transition-all">
-      
-      {/* Stack Visual Effect (Book layers behind the main one) */}
-      {group.bookCount > 1 && (
-        <>
-          <div className="absolute inset-0 bg-neutral-800/40 rounded-3xl translate-x-4 -translate-y-2 border border-white/10" />
-          <div className="absolute inset-0 bg-neutral-800/70 rounded-3xl translate-x-2 -translate-y-1 border border-white/10" />
-        </>
-      )}
-
-      {/* Main Front Cover */}
-      <div className="absolute inset-0 bg-neutral-900 rounded-3xl overflow-hidden shadow-[0_20px_40px_rgba(0,0,0,0.6)] border border-white/5 group-hover:border-aether-purple/50 transition-all z-10">
-        {group.coverUrl ? (
-          <img src={group.coverUrl} alt={group.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" loading="lazy" />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center text-neutral-800">
-            <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
-          </div>
-        )}
-        
-        {/* Collection Badge at Bottom Overlay */}
-        <div className="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-black/80 via-black/20 to-transparent">
-             <p className="text-[8px] font-black uppercase tracking-[0.2em] text-aether-purple drop-shadow-sm">COLLECTION</p>
-        </div>
-      </div>
-      
-      {/* Circular Gold/Orange Book Count Badge (Top Right) */}
-      <div className="absolute -top-1 -right-1 bg-[#b28a47] w-7 h-7 flex items-center justify-center rounded-full shadow-xl z-20 border border-black/20 transform translate-x-1 -translate-y-1">
-        <p className="text-[12px] font-black text-black leading-none">{group.bookCount}</p>
-      </div>
-    </div>
-
-    {/* Series Name Label (Below the Card) */}
-    <div className="px-1 text-center mt-2">
-      <h3 className="text-[14px] font-bold line-clamp-1 group-hover:text-aether-purple transition-colors leading-tight text-white/90">{group.name}</h3>
     </div>
   </button>
 );
