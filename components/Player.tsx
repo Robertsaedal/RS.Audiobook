@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { AuthState, ABSLibraryItem, ABSChapter } from '../types';
 import { ABSService } from '../services/absService';
@@ -18,44 +19,54 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
   const [chapters, setChapters] = useState<ABSChapter[]>([]);
   const [showChapters, setShowChapters] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [detailedItem, setDetailedItem] = useState<ABSLibraryItem | null>(null);
 
   const absService = useMemo(() => new ABSService(auth.serverUrl, auth.user?.token || ''), [auth]);
   const duration = item.media.duration || 0;
 
   const audioUrl = useMemo(() => {
-    const audioFiles = item.media.audioFiles || [];
-    const url = audioFiles.length > 0 
-      ? `${auth.serverUrl}/api/items/${item.id}/file/${audioFiles[0].id}?token=${auth.user?.token}`
-      : `${auth.serverUrl}/api/items/${item.id}/file/${item.id}?token=${auth.user?.token}`;
-    console.log("✅ Audio URL:", url);
-    return url;
-  }, [item, auth]);
+    if (!detailedItem) return null;
+    const audioFiles = detailedItem.media.audioFiles || [];
+    if (audioFiles.length === 0) return null;
+    
+    // Sort by index to play the first file
+    const sortedFiles = [...audioFiles].sort((a, b) => (a.index || 0) - (b.index || 0));
+    return `${auth.serverUrl}/api/items/${item.id}/file/${sortedFiles[0].id}?token=${auth.user?.token}`;
+  }, [detailedItem, item.id, auth]);
   
-  const coverUrl = useMemo(() => absService.getCoverUrl(item.id), [item, absService]);
+  const coverUrl = useMemo(() => absService.getCoverUrl(item.id), [item.id, absService]);
 
   useEffect(() => {
     isMounted.current = true;
     const initPlayer = async () => {
       setIsLoading(true);
       try {
-        const [details, progress] = await Promise.allSettled([
+        const [detailsResult, progressResult] = await Promise.allSettled([
           absService.getItemDetails(item.id),
           absService.getProgress(item.id)
         ]);
         
         if (isMounted.current) {
-          if (details.status === 'fulfilled' && details.value.media.chapters) {
-            setChapters(details.value.media.chapters);
+          if (detailsResult.status === 'fulfilled') {
+            setDetailedItem(detailsResult.value);
+            if (detailsResult.value.media.chapters) {
+              setChapters(detailsResult.value.media.chapters);
+            }
           }
-          if (progress.status === 'fulfilled' && progress.value && audioRef.current) {
-            const savedTime = progress.value.currentTime || 0;
+          
+          if (progressResult.status === 'fulfilled' && progressResult.value && audioRef.current) {
+            const savedTime = progressResult.value.currentTime || 0;
             audioRef.current.currentTime = savedTime;
             setCurrentTime(savedTime);
           }
         }
-      } catch (e) { console.error("Init error", e); }
-      finally { if (isMounted.current) setIsLoading(false); }
+      } catch (e) { 
+        console.error("Init player error:", e); 
+      } finally { 
+        if (isMounted.current) setIsLoading(false); 
+      }
     };
+
     initPlayer();
     return () => { isMounted.current = false; };
   }, [item.id, absService]);
@@ -76,13 +87,18 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
     try {
       if (isPlaying) {
         audioRef.current.pause();
-        setIsPlaying(false);
       } else {
-        if (audioRef.current.readyState === 0) audioRef.current.load();
         await audioRef.current.play();
-        setIsPlaying(true);
       }
-    } catch (e) { console.error("Playback failed", e); }
+    } catch (e) { 
+      console.error("Playback toggle failed:", e); 
+    }
+  };
+
+  const handleTimeUpdate = () => {
+    if (audioRef.current) {
+      setCurrentTime(audioRef.current.currentTime);
+    }
   };
 
   const formatTime = (s: number) => {
@@ -91,68 +107,127 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
     return `${h > 0 ? h + ':' : ''}${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
   };
 
-  if (isLoading) return <div className="flex-1 flex items-center justify-center bg-black text-purple-500 font-black">LOADING...</div>;
+  if (isLoading) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center bg-black">
+        <div className="w-12 h-12 border-4 border-purple-600/20 border-t-purple-600 rounded-full animate-spin mb-4" />
+        <p className="text-purple-500 font-black tracking-widest text-[10px] uppercase">Buffering Hub...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 flex flex-col bg-black text-white h-full overflow-hidden relative">
-      <audio
-  key={audioUrl}
-  ref={audioRef}
-  src={audioUrl}
-  controls  /* Change 'hidden' to 'controls' temporarily */
-  className="block w-full mt-4" 
-  onPlay={() => setIsPlaying(true)}
-  onPause={() => setIsPlaying(false)}
-/>
+      {audioUrl && (
+        <audio
+          ref={audioRef}
+          src={audioUrl}
+          onPlay={() => setIsPlaying(true)}
+          onPause={() => setIsPlaying(false)}
+          onTimeUpdate={handleTimeUpdate}
+          onEnded={() => setIsPlaying(false)}
+          preload="auto"
+        />
+      )}
 
-      <header className="px-6 py-4 flex justify-between items-center">
-        <button onClick={onBack} className="text-neutral-400 p-2">BACK</button>
-        <span className="text-[10px] tracking-widest font-black uppercase">R.S Audiobooks</span>
-        <button onClick={() => setShowChapters(true)} className="text-purple-500 p-2">CH</button>
+      <header className="px-6 py-4 flex justify-between items-center safe-top">
+        <button onClick={onBack} className="text-neutral-500 hover:text-white transition-colors text-[10px] font-black uppercase tracking-widest">
+          Library
+        </button>
+        <span className="text-[10px] tracking-[0.4em] font-black uppercase text-neutral-600">R.S Audio</span>
+        <button onClick={() => setShowChapters(true)} className="text-purple-500 font-black text-[10px] uppercase tracking-widest">
+          Chapters
+        </button>
       </header>
 
-      <div className="flex-1 flex flex-col items-center px-8">
-        <div className="w-full aspect-square max-w-[300px] rounded-3xl overflow-hidden mb-8 border border-white/10 shadow-2xl">
-          <img src={coverUrl} alt="Cover" className="w-full h-full object-cover" />
+      <div className="flex-1 flex flex-col items-center px-8 pt-4">
+        <div className="w-full aspect-square max-w-[320px] rounded-[40px] overflow-hidden mb-10 shadow-[0_30px_60px_-15px_rgba(0,0,0,0.7)] border border-white/5 relative group">
+          <img src={coverUrl} alt="Cover" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-1000" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
         </div>
 
-        <div className="text-center mb-8">
-          <h1 className="text-xl font-black uppercase truncate max-w-[280px]">{item.media.metadata.title}</h1>
-          <p className="text-neutral-500 text-xs font-bold uppercase">{item.media.metadata.authorName}</p>
+        <div className="text-center mb-10 w-full">
+          <h1 className="text-2xl font-black uppercase truncate px-4 tracking-tight leading-tight">{item.media.metadata.title}</h1>
+          <p className="text-neutral-500 text-[10px] font-black uppercase tracking-[0.3em] mt-2">{item.media.metadata.authorName}</p>
         </div>
 
-        <div className="w-full mb-10 text-center">
-          <div className="text-5xl font-bold tabular-nums mb-4">{formatTime(currentTime)}</div>
-          <div className="h-1.5 w-full bg-neutral-900 rounded-full overflow-hidden">
-            <div className="h-full bg-purple-600 transition-all" style={{ width: `${(currentTime / (duration || 1)) * 100}%` }} />
+        <div className="w-full mb-12">
+          <div className="text-6xl font-black tabular-nums mb-6 tracking-tighter text-center">
+            {formatTime(currentTime)}
+          </div>
+          <div 
+            className="h-2 w-full bg-neutral-900/50 rounded-full overflow-hidden cursor-pointer relative"
+            onClick={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              const pos = (e.clientX - rect.left) / rect.width;
+              if (audioRef.current) audioRef.current.currentTime = pos * duration;
+            }}
+          >
+            <div 
+              className="h-full gradient-aether shadow-[0_0_15px_rgba(157,80,187,0.5)] transition-all duration-300 ease-out" 
+              style={{ width: `${(currentTime / (duration || 1)) * 100}%` }} 
+            />
+          </div>
+          <div className="flex justify-between mt-3 px-1">
+            <span className="text-[9px] font-black text-neutral-600 tabular-nums">{formatTime(currentTime)}</span>
+            <span className="text-[9px] font-black text-neutral-600 tabular-nums">-{formatTime(duration - currentTime)}</span>
           </div>
         </div>
 
-        <div className="flex items-center gap-12">
-          <button onClick={() => audioRef.current && (audioRef.current.currentTime -= 15)} className="text-neutral-400">
-            <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24"><path d="M12.5 8c-2.65 0-5.05 1-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/></svg>
+        <div className="flex items-center gap-10">
+          <button 
+            onClick={() => audioRef.current && (audioRef.current.currentTime -= 15)} 
+            className="text-neutral-500 hover:text-white active:scale-90 transition-all p-4"
+          >
+            <svg className="w-7 h-7" fill="currentColor" viewBox="0 0 24 24"><path d="M12.5 8c-2.65 0-5.05 1-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/></svg>
           </button>
-          <button onClick={togglePlay} className="w-20 h-20 bg-purple-600 rounded-full flex items-center justify-center shadow-xl">
-            {isPlaying ? <span className="text-3xl">II</span> : <span className="text-3xl ml-1">▶</span>}
+          
+          <button 
+            onClick={togglePlay} 
+            className="w-24 h-24 gradient-aether rounded-full flex items-center justify-center shadow-[0_20px_40px_rgba(157,80,187,0.3)] active:scale-95 transition-all"
+          >
+            {isPlaying ? (
+              <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+            ) : (
+              <svg className="w-8 h-8 text-white translate-x-1" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+            )}
           </button>
-          <button onClick={() => audioRef.current && (audioRef.current.currentTime += 30)} className="text-neutral-400">
-            <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24"><path d="M11.5 8c2.65 0 5.05 1 6.9 2.6L22 7v9h-9l3.62-3.62c-1.39-1.16-3.16-1.88-5.12-1.88-3.54 0-6.55 2.31-7.6 5.5l-2.37-.78C2.92 11.03 6.85 8 11.5 8z"/></svg>
+
+          <button 
+            onClick={() => audioRef.current && (audioRef.current.currentTime += 30)} 
+            className="text-neutral-500 hover:text-white active:scale-90 transition-all p-4"
+          >
+            <svg className="w-7 h-7" fill="currentColor" viewBox="0 0 24 24"><path d="M11.5 8c2.65 0 5.05 1 6.9 2.6L22 7v9h-9l3.62-3.62c-1.39-1.16-3.16-1.88-5.12-1.88-3.54 0-6.55 2.31-7.6 5.5l-2.37-.78C2.92 11.03 6.85 8 11.5 8z"/></svg>
           </button>
         </div>
       </div>
 
       {showChapters && (
-        <div className="fixed inset-0 bg-neutral-950 z-50 p-6 overflow-y-auto">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="font-black uppercase">Chapters</h2>
-            <button onClick={() => setShowChapters(false)}>CLOSE</button>
+        <div className="fixed inset-0 bg-black/95 backdrop-blur-2xl z-50 p-6 flex flex-col animate-slide-up">
+          <div className="flex justify-between items-center mb-8">
+            <h2 className="text-xl font-black uppercase tracking-tight text-purple-500">Chapters</h2>
+            <button onClick={() => setShowChapters(false)} className="bg-neutral-900 p-3 rounded-2xl text-[10px] font-black">CLOSE</button>
           </div>
-          {chapters.map((ch, i) => (
-            <button key={i} onClick={() => { if(audioRef.current) audioRef.current.currentTime = ch.start; setShowChapters(false); }}
-              className="w-full text-left p-4 mb-2 bg-neutral-900 rounded-xl border border-white/5 text-sm">
-              {ch.title}
-            </button>
-          ))}
+          <div className="flex-1 overflow-y-auto no-scrollbar space-y-3">
+            {chapters.length > 0 ? chapters.map((ch, i) => (
+              <button 
+                key={i} 
+                onClick={() => { if(audioRef.current) audioRef.current.currentTime = ch.start; setShowChapters(false); }}
+                className={`w-full text-left p-5 rounded-3xl border transition-all active:scale-[0.98] ${
+                  currentTime >= ch.start && (i === chapters.length - 1 || currentTime < chapters[i+1].start)
+                  ? 'bg-purple-600/20 border-purple-600/50 text-white' 
+                  : 'bg-neutral-950 border-white/5 text-neutral-400'
+                }`}
+              >
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-bold truncate pr-4">{ch.title || `Chapter ${i + 1}`}</span>
+                  <span className="text-[10px] font-black tabular-nums opacity-60">{formatTime(ch.start)}</span>
+                </div>
+              </button>
+            )) : (
+              <div className="h-full flex items-center justify-center text-neutral-600 font-black uppercase text-[10px] tracking-widest">No Chapter Data</div>
+            )}
+          </div>
         </div>
       )}
     </div>
