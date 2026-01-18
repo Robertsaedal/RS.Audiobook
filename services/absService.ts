@@ -70,8 +70,7 @@ export class ABSService {
   }
 
   async getLibraryItems(): Promise<ABSLibraryItem[]> {
-    // Added /api back here
-    const data = await this.fetchApi('/items');
+    const data = await this.fetchApi('/api/items'); // Added /api/ back
     return data.results || data;
   }
 
@@ -81,8 +80,7 @@ export class ABSService {
   }
 
   async getSeries(): Promise<ABSSeries[]> {
-    // Added /api back here
-    const data = await this.fetchApi('/api/series');
+    const data = await this.fetchApi('/api/series'); // Added /api/ back
     return data.results || data;
   }
 
