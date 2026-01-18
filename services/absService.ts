@@ -26,7 +26,6 @@ export class ABSService {
     const response = await fetch(endpoint, {
       method: 'POST',
       mode: 'cors',
-      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
         username: username.trim(), 
@@ -49,7 +48,6 @@ export class ABSService {
     const response = await fetch(url, {
       ...options,
       mode: 'cors',
-      credentials: 'include',
       headers: {
         'Authorization': `Bearer ${this.token}`,
         'Content-Type': 'application/json',
@@ -58,16 +56,23 @@ export class ABSService {
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`ABS API Error (${response.status}): ${errorText || response.statusText}`);
+      // If it's a 404 for progress, don't throw, just return null
+      if (response.status === 404) return null;
+      const errorText = await response.text().catch(() => 'Error');
+      throw new Error(`ABS API Error (${response.status}): ${errorText}`);
     }
 
-    return response.json();
+    // Safely handle empty responses or non-JSON responses
+    const contentType = response.headers.get("content-type");
+    if (contentType && contentType.includes("application/json")) {
+      return response.json();
+    }
+    return response.text();
   }
 
   async getLibraryItems(): Promise<ABSLibraryItem[]> {
     const data = await this.fetchApi(`/api/libraries/${this.libraryId}/items?include=progress`);
-    return data.results || data;
+    return data?.results || data || [];
   }
 
   async getItemDetails(id: string): Promise<ABSLibraryItem> {
@@ -76,51 +81,38 @@ export class ABSService {
 
   async getSeries(): Promise<ABSSeries[]> {
     const data = await this.fetchApi(`/api/libraries/${this.libraryId}/series`);
-    return data.results || (Array.isArray(data) ? data : []);
+    return data?.results || (Array.isArray(data) ? data : []);
   }
 
   async getProgress(id: string): Promise<any> {
     try {
+      // fetchApi now handles the 404 internally
       return await this.fetchApi(`/api/users/me/progress/${id}`);
     } catch (e) {
+      console.warn("Could not fetch progress:", e);
       return null;
     }
   }
 
   async saveProgress(itemId: string, currentTime: number, duration: number): Promise<void> {
-    try {
-      const response = await fetch(`${this.serverUrl}/api/me/progress/${itemId}`, {
-        method: 'PATCH',
-        mode: 'cors',
-        credentials: 'include',
-        headers: {
-          'Authorization': `Bearer ${this.token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          currentTime,
-          duration,
-          progress: duration > 0 ? currentTime / duration : 0,
-          isFinished: currentTime >= duration - 10 && duration > 0,
-        }),
-      });
-
-      if (!response.ok) {
-        // Fallback for different ABS server versions
-        await fetch(`${this.serverUrl}/api/users/me/progress/${itemId}`, {
-          method: 'PATCH',
-          mode: 'cors',
-          credentials: 'include',
-          headers: {
-            'Authorization': `Bearer ${this.token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ currentTime, duration }),
-        });
-      }
-    } catch (e) {
-      console.error("Progress sync failed, but allowing playback to continue.");
-    }
+    const url = `${this.serverUrl}/api/users/me/progress/${itemId}`;
+    
+    // We use a "fire and forget" approach for progress updates to keep the UI snappy
+    fetch(url, {
+      method: 'PATCH',
+      mode: 'cors',
+      headers: {
+        'Authorization': `Bearer ${this.token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        currentTime,
+        duration,
+        progress: duration > 0 ? currentTime / duration : 0,
+        isFinished: currentTime >= duration - 10 && duration > 0,
+      }),
+      keepalive: true // Helps save progress even if the user closes the tab
+    }).catch(err => console.error("Sync error:", err));
   }
 
   getAudioUrl(itemId: string, audioFileId: string): string {
