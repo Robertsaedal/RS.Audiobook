@@ -17,16 +17,16 @@ export class ABSService {
   }
 
   /**
-   * Static login method configured to bypass preflight blocks and handle CORS.
-   * Endpoint: https://rs-audio-server.duckdns.org/api/login
+   * Static login method configured to bypass preflight blocks and handle CORS securely.
+   * Uses VITE_ABS_URL if available, otherwise falls back to the provided or default URL.
    */
   static async login(serverUrl: string, username: string, password: string): Promise<any> {
-    // If the provided serverUrl is empty or default, we ensure the correct production endpoint
-    let baseUrl = serverUrl.trim().replace(/\/+$/, '');
-    if (!baseUrl || baseUrl === 'rs-audio-server.duckdns.org') {
-      baseUrl = 'https://rs-audio-server.duckdns.org';
-    }
+    const envUrl = (import.meta as any).env?.VITE_ABS_URL;
     
+    // Clean and build the base URL
+    let baseUrl = (serverUrl || envUrl || 'rs-audio-server.duckdns.org').trim().replace(/\/+$/, '');
+    
+    // Ensure protocol
     if (!baseUrl.startsWith('http')) {
       baseUrl = `https://${baseUrl}`;
     }
@@ -35,10 +35,10 @@ export class ABSService {
 
     const response = await fetch(endpoint, {
       method: 'POST',
-      mode: 'cors',           // Explicitly set CORS mode
-      credentials: 'include', // Include credentials/cookies for cross-origin requests
+      mode: 'cors',           // Use CORS mode to handle cross-origin requests
+      credentials: 'include', // Include credentials for secure session handling
       headers: {
-        'Content-Type': 'application/json' // Simple standard header
+        'Content-Type': 'application/json' // Minimal standard header to avoid preflight issues
       },
       body: JSON.stringify({ 
         username: username.trim(), 
@@ -60,8 +60,8 @@ export class ABSService {
 
     const response = await fetch(url, {
       ...options,
-      mode: 'cors',
-      credentials: 'include',
+      mode: 'cors',           // Consistent CORS mode for authenticated requests
+      credentials: 'include', // Consistent credentials handling
       headers: {
         'Authorization': `Bearer ${this.token}`,
         'Content-Type': 'application/json',
