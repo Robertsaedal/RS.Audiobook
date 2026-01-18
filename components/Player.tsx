@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { AuthState, ABSLibraryItem, ABSChapter, ABSProgress } from '../types';
 import { ABSService } from '../services/absService';
@@ -182,7 +181,6 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
     audioRef.current.currentTime = chapters[targetIndex].start;
   };
 
-  // Added missing jumpToChapter function used in the chapters list overlay
   const jumpToChapter = (chapter: ABSChapter) => {
     if (audioRef.current) {
       audioRef.current.currentTime = chapter.start;
@@ -361,14 +359,6 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
           </div>
         </>
       )}
-
-      <style dangerouslySetInnerHTML={{ __html: `
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .shadow-aether-glow { text-shadow: 0 0 15px rgba(157, 80, 187, 0.8); }
-        .drop-shadow-aether-glow { filter: drop-shadow(0 0 8px rgba(157, 80, 187, 0.6)); }
-        @keyframes tap-pop { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
-        .animate-tap-pop { animation: tap-pop 0.2s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; }
-      `}} />
     </div>
   );
 };
