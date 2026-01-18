@@ -134,8 +134,9 @@ export class ABSService {
   }
 
   getAudioUrl(itemId: string, audioFileId: string): string {
-    return `${this.serverUrl}/api/items/${itemId}/audio/${audioFileId}?token=${this.token}`;
-  }
+  // Use the standard API endpoint that includes the token for authentication
+  return `${this.serverUrl}/api/items/${itemId}/file/${audioFileId}?token=${this.token}`;
+}
 
   getCoverUrl(itemId: string): string {
     return `${this.serverUrl}/api/items/${itemId}/cover?token=${this.token}`;
