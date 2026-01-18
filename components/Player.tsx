@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { AuthState, ABSLibraryItem, ABSChapter } from '../types';
 import { ABSService } from '../services/absService';
 
@@ -12,6 +12,7 @@ interface PlayerProps {
 const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const syncIntervalRef = useRef<number | null>(null);
+  const playPromiseRef = useRef<Promise<void> | null>(null);
   const isMounted = useRef(true);
   
   const [isPlaying, setIsPlaying] = useState(false);
@@ -20,70 +21,70 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
   const [showChapters, setShowChapters] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [detailedItem, setDetailedItem] = useState<ABSLibraryItem | null>(null);
+  const [initialSeekDone, setInitialSeekDone] = useState(false);
+  const [savedStartTime, setSavedStartTime] = useState(0);
 
   const absService = useMemo(() => new ABSService(auth.serverUrl, auth.user?.token || ''), [auth]);
   const duration = item.media.duration || 0;
 
   const audioUrl = useMemo(() => {
-    if (!detailedItem || !detailedItem.media || !detailedItem.media.audioFiles) return null;
-    const audioFiles = detailedItem.media.audioFiles;
-    if (audioFiles.length === 0) return null;
+    if (!detailedItem?.media?.audioFiles?.length) return null;
     
-    // Sort by index to play the first file
+    const audioFiles = detailedItem.media.audioFiles;
     const sortedFiles = [...audioFiles].sort((a, b) => (a.index || 0) - (b.index || 0));
     const firstFile = sortedFiles[0];
     
-    // ABS uses 'ino' or 'id' for the file endpoint
+    // Fallback chain for ABS file identifiers
     const fileId = firstFile.id || firstFile.ino;
     
-    if (!fileId) {
-      console.warn("No file identifier (id or ino) found for audio file");
-      return null;
-    }
+    if (!fileId) return null;
     
     return `${auth.serverUrl}/api/items/${item.id}/file/${fileId}?token=${auth.user?.token}`;
   }, [detailedItem, item.id, auth]);
   
   const coverUrl = useMemo(() => absService.getCoverUrl(item.id), [item.id, absService]);
 
+  // Load book details and progress
   useEffect(() => {
     isMounted.current = true;
-    const initPlayer = async () => {
+    const initData = async () => {
       setIsLoading(true);
       try {
-        const [detailsResult, progressResult] = await Promise.allSettled([
+        const [details, progress] = await Promise.all([
           absService.getItemDetails(item.id),
           absService.getProgress(item.id)
         ]);
         
         if (isMounted.current) {
-          if (detailsResult.status === 'fulfilled' && detailsResult.value) {
-            setDetailedItem(detailsResult.value);
-            if (detailsResult.value.media.chapters) {
-              setChapters(detailsResult.value.media.chapters);
-            }
+          if (details) {
+            setDetailedItem(details);
+            if (details.media.chapters) setChapters(details.media.chapters);
           }
-          
-          if (progressResult.status === 'fulfilled' && progressResult.value && audioRef.current) {
-            const savedTime = progressResult.value.currentTime || 0;
-            // Only set if valid number
-            if (!isNaN(savedTime) && savedTime > 0) {
-              audioRef.current.currentTime = savedTime;
-              setCurrentTime(savedTime);
-            }
+          if (progress?.currentTime) {
+            setSavedStartTime(progress.currentTime);
           }
         }
-      } catch (e) { 
-        console.error("Init player error:", e); 
-      } finally { 
-        if (isMounted.current) setIsLoading(false); 
+      } catch (e) {
+        console.error("Failed to fetch book details:", e);
+      } finally {
+        if (isMounted.current) setIsLoading(false);
       }
     };
 
-    initPlayer();
+    initData();
     return () => { isMounted.current = false; };
   }, [item.id, absService]);
 
+  // Handle initial seek once audio is ready
+  const handleLoadedMetadata = () => {
+    if (audioRef.current && !initialSeekDone && savedStartTime > 0) {
+      audioRef.current.currentTime = savedStartTime;
+      setCurrentTime(savedStartTime);
+      setInitialSeekDone(true);
+    }
+  };
+
+  // Sync progress to server
   useEffect(() => {
     if (isPlaying) {
       syncIntervalRef.current = window.setInterval(() => {
@@ -95,18 +96,30 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
     return () => { if (syncIntervalRef.current) clearInterval(syncIntervalRef.current); };
   }, [isPlaying, item.id, duration, absService]);
 
-  const togglePlay = async () => {
-    if (!audioRef.current || !audioUrl) return;
+  const togglePlay = useCallback(async () => {
+    if (!audioRef.current) return;
+
     try {
-      if (isPlaying) {
-        audioRef.current.pause();
-      } else {
-        await audioRef.current.play();
+      // If there is an existing play promise, wait for it to resolve/reject first
+      if (playPromiseRef.current) {
+        await playPromiseRef.current;
       }
-    } catch (e) { 
-      console.error("Playback toggle failed:", e); 
+
+      if (audioRef.current.paused) {
+        playPromiseRef.current = audioRef.current.play();
+        await playPromiseRef.current;
+        setIsPlaying(true);
+      } else {
+        audioRef.current.pause();
+        setIsPlaying(false);
+      }
+    } catch (e) {
+      console.error("Playback error:", e);
+      setIsPlaying(false);
+    } finally {
+      playPromiseRef.current = null;
     }
-  };
+  }, []);
 
   const handleTimeUpdate = () => {
     if (audioRef.current) {
@@ -115,7 +128,7 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
   };
 
   const formatTime = (s: number) => {
-    if (s === undefined || s === null || isNaN(s)) return "00:00";
+    if (isNaN(s) || s === null) return "00:00";
     const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = Math.floor(s % 60);
     return `${h > 0 ? h + ':' : ''}${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
   };
@@ -124,7 +137,7 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
     return (
       <div className="flex-1 flex flex-col items-center justify-center bg-black">
         <div className="w-12 h-12 border-4 border-purple-600/20 border-t-purple-600 rounded-full animate-spin mb-4" />
-        <p className="text-purple-500 font-black tracking-widest text-[10px] uppercase">Buffering Hub...</p>
+        <p className="text-purple-500 font-black tracking-widest text-[10px] uppercase">Accessing Hub...</p>
       </div>
     );
   }
@@ -138,6 +151,7 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
           onPlay={() => setIsPlaying(true)}
           onPause={() => setIsPlaying(false)}
           onTimeUpdate={handleTimeUpdate}
+          onLoadedMetadata={handleLoadedMetadata}
           onEnded={() => setIsPlaying(false)}
           preload="auto"
         />
@@ -166,7 +180,7 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
 
         {!audioUrl ? (
           <div className="w-full p-6 bg-red-900/10 border border-red-900/20 rounded-3xl text-center">
-            <p className="text-red-500 text-[10px] font-black uppercase tracking-widest">Error: No playable audio file found</p>
+            <p className="text-red-500 text-[10px] font-black uppercase tracking-widest">Wait: Resolving Media...</p>
           </div>
         ) : (
           <>
