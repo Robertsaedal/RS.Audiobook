@@ -4,10 +4,21 @@
 
 @layer base {
   body {
-    @apply bg-black text-white overflow-hidden;
+    /* FIXED: Changed overflow-hidden to overflow-y-auto to allow scrolling */
+    @apply bg-black text-white overflow-y-auto;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    overscroll-behavior: none;
+    
+    /* Helps prevent the "bounce" effect on mobile but allows scrolling */
+    overscroll-behavior-y: contain; 
     -webkit-tap-highlight-color: transparent;
+    min-height: 100vh;
+  }
+
+  /* Ensure the root container also allows the full height */
+  #root {
+    min-height: 100vh;
+    display: flex;
+    flex-col: column;
   }
 }
 
@@ -40,9 +51,15 @@
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
+
+  /* Add this to help the library grid scroll smoothly */
+  .scroll-container {
+    -webkit-overflow-scrolling: touch;
+    overflow-y: auto;
+  }
 }
 
-/* Custom scrollbar for desktop/web views */
+/* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 4px;
 }
