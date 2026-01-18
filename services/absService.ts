@@ -3,7 +3,6 @@ import { ABSUser, ABSLibraryItem, ABSSeries, ABSProgress } from '../types';
 export class ABSService {
   private serverUrl: string;
   private token: string;
-  // Your verified Library ID
   private libraryId = 'a5706742-ccbf-452a-8b7d-822988dd5f63';
 
   constructor(serverUrl: string, token: string) {
@@ -109,7 +108,16 @@ export class ABSService {
       if (!response.ok) {
         throw new Error(`Save failed: ${response.status}`);
       }
-      // Note: We do NOT call .json() here because ABS returns "OK" string
     } catch (e) {
       console.error("Failed to sync progress to server", e);
     }
+  }
+
+  getAudioUrl(itemId: string, audioFileId: string): string {
+    return `${this.serverUrl}/api/items/${itemId}/audio/${audioFileId}?token=${this.token}`;
+  }
+
+  getCoverUrl(itemId: string): string {
+    return `${this.serverUrl}/api/items/${itemId}/cover?token=${this.token}`;
+  }
+}
