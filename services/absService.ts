@@ -82,18 +82,14 @@ export class ABSService {
     return data.results || (Array.isArray(data) ? data : []);
   }
 
-  async getProgress(itemId: string): Promise<ABSProgress | null> {
-    try {
-      // Try the more explicit user path
-      return await this.fetchApi(`/api/users/me/progress/${itemId}`);
-    } catch (e) {
-      // If that still 404s, try the base path as a fallback
-      try {
-        return await this.fetchApi(`/api/me/progress/${itemId}`);
-      } catch (innerError) {
-        return null;
-      }
-    }
+  async getProgress(id: string): Promise<any> {
+  try {
+    return await this.fetchApi(`/api/users/me/progress/${id}`);
+  } catch (e) {
+    // Return null so the Player knows to start at 0
+    return null;
+  }
+}
   }
 
   async saveProgress(itemId: string, currentTime: number, duration: number): Promise<void> {
