@@ -11,9 +11,8 @@ interface LibraryProps {
 
 const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
   const [items, setItems] = useState<ABSLibraryItem[]>([]);
-  const [history, setHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'RECENT' | 'SERIES' | 'HISTORY'>('RECENT');
+  const [activeTab, setActiveTab] = useState<'HOME' | 'BOOKS' | 'SERIES'>('HOME');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSeries, setSelectedSeries] = useState<any | null>(null);
 
@@ -22,12 +21,8 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [libraryItems, userHistory] = await Promise.all([
-        absService.getLibraryItems(),
-        absService.getUserHistory()
-      ]);
+      const libraryItems = await absService.getLibraryItems();
       setItems(libraryItems);
-      setHistory(userHistory);
     } catch (e) {
       console.error("Fetch failed", e);
     } finally {
@@ -39,7 +34,7 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
     fetchData();
   }, [absService]);
 
-  // CONTINUE LISTENING: Find the most recent unfinished book
+  // SYNC: Find the most recent unfinished book for the Home Hero
   const continueListeningItem = useMemo(() => {
     return items
       .filter(item => {
@@ -53,20 +48,10 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
       })[0];
   }, [items]);
 
-  // HISTORY ITEMS: Populate from server history mapping to library items
-  const historyItems = useMemo(() => {
-    if (!history.length) return [];
-    // Map history sessions to our actual library items
-    const itemMap = new Map(items.map(i => [i.id, i]));
-    const uniqueIds = new Set();
-    return history
-      .map(session => itemMap.get(session.libraryItemId || session.itemId))
-      .filter(item => {
-        if (!item || uniqueIds.has(item.id)) return false;
-        uniqueIds.add(item.id);
-        return true;
-      }) as ABSLibraryItem[];
-  }, [history, items]);
+  // Recently Added items for Home
+  const recentlyAdded = useMemo(() => {
+    return [...items].sort((a, b) => (b.addedDate || 0) - (a.addedDate || 0)).slice(0, 6);
+  }, [items]);
 
   const filteredItems = useMemo(() => {
     return items.filter(item => 
@@ -123,7 +108,7 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
         <div className="flex justify-between items-center">
           <div>
             <h2 className="text-2xl font-black tracking-tight text-aether-purple drop-shadow-aether-glow">R.S AUDIOBOOKS</h2>
-            <p className="text-[8px] uppercase tracking-[0.4em] text-neutral-600 font-black">Digital Audiobookshelf</p>
+            <p className="text-[8px] uppercase tracking-[0.4em] text-neutral-600 font-black">Digital Audiobookshelf Hub</p>
           </div>
           <button onClick={onLogout} className="text-[10px] font-black uppercase tracking-widest text-neutral-600 hover:text-white transition-colors">
             Logout
@@ -146,9 +131,9 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
 
       <nav className="flex px-6 py-6 gap-6 shrink-0 border-b border-white/5">
         {[
-          { id: 'RECENT', label: 'Library' },
-          { id: 'SERIES', label: 'Series' },
-          { id: 'HISTORY', label: 'History' }
+          { id: 'HOME', label: 'Home' },
+          { id: 'BOOKS', label: 'Books' },
+          { id: 'SERIES', label: 'Series' }
         ].map(tab => (
           <button 
             key={tab.id}
@@ -170,38 +155,56 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
           </div>
         ) : (
           <>
-            {activeTab === 'RECENT' && (
-              <div className="space-y-10">
-                {/* CONTINUE LISTENING SECTION */}
-                {!searchTerm && continueListeningItem && (
-                  <div className="animate-fade-in">
-                    <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-neutral-600 mb-6">Continue Listening</h3>
+            {activeTab === 'HOME' && !searchTerm && (
+              <div className="space-y-12 animate-fade-in">
+                {/* HERO: CONTINUE LISTENING */}
+                {continueListeningItem ? (
+                  <div className="space-y-6">
+                    <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-neutral-600">Continue Listening</h3>
                     <div 
                       onClick={() => handleBookSelect(continueListeningItem)}
-                      className="group relative w-full aspect-[21/9] bg-neutral-900 rounded-[32px] overflow-hidden border border-white/5 cursor-pointer hover:border-aether-purple/50 transition-all active:scale-[0.98] shadow-2xl"
+                      className="group relative w-full aspect-[21/10] sm:aspect-[21/7] bg-neutral-900 rounded-[40px] overflow-hidden border border-white/5 cursor-pointer hover:border-aether-purple/50 transition-all active:scale-[0.98] shadow-2xl"
                     >
                       <img 
                         src={absService.getCoverUrl(continueListeningItem.id)} 
                         alt="Resume" 
-                        className="absolute inset-0 w-full h-full object-cover opacity-40 group-hover:scale-105 transition-transform duration-1000"
+                        className="absolute inset-0 w-full h-full object-cover opacity-50 group-hover:scale-105 transition-transform duration-1000"
                       />
-                      <div className="absolute inset-0 bg-gradient-to-r from-black via-black/60 to-transparent" />
-                      <div className="absolute inset-y-0 left-0 p-8 flex flex-col justify-center max-w-[70%]">
-                        <span className="text-[9px] font-black uppercase tracking-[0.3em] text-aether-purple mb-2">RESUME SESSION</span>
-                        <h4 className="text-xl font-black uppercase tracking-tight text-white mb-1 line-clamp-1">{continueListeningItem.media.metadata.title}</h4>
-                        <p className="text-[10px] font-black text-neutral-400 uppercase tracking-widest">{continueListeningItem.media.metadata.authorName}</p>
+                      <div className="absolute inset-0 bg-gradient-to-r from-black via-black/40 to-transparent" />
+                      <div className="absolute inset-y-0 left-0 p-8 sm:p-12 flex flex-col justify-center max-w-[80%]">
+                        <span className="text-[9px] font-black uppercase tracking-[0.4em] text-aether-purple mb-3">LAST SESSION</span>
+                        <h4 className="text-2xl sm:text-3xl font-black uppercase tracking-tight text-white mb-2 line-clamp-1">{continueListeningItem.media.metadata.title}</h4>
+                        <p className="text-[11px] font-black text-neutral-400 uppercase tracking-widest mb-6">{continueListeningItem.media.metadata.authorName}</p>
+                        
+                        {/* MINI PROGRESS BAR */}
+                        {(continueListeningItem as any).userProgress && (
+                           <div className="w-full max-w-[200px] h-1 bg-white/10 rounded-full overflow-hidden">
+                              <div 
+                                className="h-full gradient-aether shadow-aether-glow" 
+                                style={{ width: `${((continueListeningItem as any).userProgress.progress || 0) * 100}%` }}
+                              />
+                           </div>
+                        )}
                       </div>
-                      <div className="absolute right-8 top-1/2 -translate-y-1/2 w-14 h-14 gradient-aether rounded-full flex items-center justify-center shadow-aether-glow">
-                        <svg className="w-6 h-6 text-white translate-x-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                      <div className="absolute right-8 sm:right-12 top-1/2 -translate-y-1/2 w-16 h-16 gradient-aether rounded-full flex items-center justify-center shadow-aether-glow hover:scale-110 transition-transform">
+                        <svg className="w-7 h-7 text-white translate-x-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
                       </div>
                     </div>
                   </div>
+                ) : (
+                  <div className="bg-neutral-900/40 rounded-[40px] p-12 text-center border border-white/5">
+                    <p className="text-[10px] font-black uppercase tracking-[0.4em] text-neutral-600">Start a new journey in the Books tab</p>
+                  </div>
                 )}
 
-                <div className="animate-fade-in">
-                  <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-neutral-600 mb-6">Your Library</h3>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-6 gap-y-10">
-                    {filteredItems.map(item => (
+                {/* RECENTLY ADDED SECTION */}
+                <div className="space-y-6">
+                  <div className="flex justify-between items-center">
+                    <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-neutral-600">Recently Added</h3>
+                    <button onClick={() => setActiveTab('BOOKS')} className="text-[10px] font-black uppercase tracking-widest text-aether-purple hover:underline">View All</button>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-x-6 gap-y-10">
+                    {recentlyAdded.map(item => (
                       <BookCard key={item.id} item={item} onClick={() => handleBookSelect(item)} coverUrl={absService.getCoverUrl(item.id)} />
                     ))}
                   </div>
@@ -209,13 +212,16 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
               </div>
             )}
 
-            {activeTab === 'HISTORY' && (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-6 gap-y-10">
-                {historyItems.length > 0 ? historyItems.map(item => (
-                  <BookCard key={item.id} item={item} onClick={() => handleBookSelect(item)} isHistory coverUrl={absService.getCoverUrl(item.id)} />
-                )) : <EmptyState message="No History Found" />}
+            {activeTab === 'BOOKS' || (activeTab === 'HOME' && searchTerm) ? (
+              <div className="animate-fade-in">
+                <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-neutral-600 mb-8">All Audiobooks</h3>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-6 gap-y-10">
+                  {filteredItems.map(item => (
+                    <BookCard key={item.id} item={item} onClick={() => handleBookSelect(item)} coverUrl={absService.getCoverUrl(item.id)} />
+                  ))}
+                </div>
               </div>
-            )}
+            ) : null}
 
             {activeTab === 'SERIES' && (
               <>
@@ -241,8 +247,8 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
               </>
             )}
 
-            {!loading && activeTab === 'RECENT' && filteredItems.length === 0 && <EmptyState message="No items found" />}
-            {!loading && activeTab === 'SERIES' && filteredSeries.length === 0 && <EmptyState message="No series found" sub="Check your metadata" />}
+            {!loading && filteredItems.length === 0 && searchTerm && <EmptyState message="No results found" />}
+            {!loading && activeTab === 'SERIES' && filteredSeries.length === 0 && !searchTerm && <EmptyState message="No series metadata found" />}
           </>
         )}
       </div>
@@ -294,8 +300,8 @@ const SeriesStackCard: React.FC<{ group: any, onClick: () => void }> = ({ group,
   </button>
 );
 
-const BookCard: React.FC<{ item: ABSLibraryItem, onClick: () => void, coverUrl: string, isHistory?: boolean, showSequence?: boolean }> = ({ item, onClick, coverUrl, isHistory, showSequence }) => {
-  // Check progress for "Finished" status
+const BookCard: React.FC<{ item: ABSLibraryItem, onClick: () => void, coverUrl: string, showSequence?: boolean }> = ({ item, onClick, coverUrl, showSequence }) => {
+  // SYNC: Extract finished status from server progress
   const isFinished = (item as any).userProgress?.isFinished === true;
 
   return (
@@ -304,9 +310,9 @@ const BookCard: React.FC<{ item: ABSLibraryItem, onClick: () => void, coverUrl: 
         <img src={coverUrl} alt={item.media.metadata.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" loading="lazy" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-80" />
         
-        {/* FINISHED BADGE */}
+        {/* FINISHED BADGE: Visual feedback for completed books */}
         {isFinished && (
-          <div className="absolute top-3 right-3 bg-green-500 w-6 h-6 rounded-full flex items-center justify-center border border-black/20 shadow-xl z-10 animate-pulse">
+          <div className="absolute top-3 right-3 bg-green-500 w-7 h-7 rounded-full flex items-center justify-center border-2 border-black/20 shadow-xl z-20">
             <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={4} d="M5 13l4 4L19 7"/></svg>
           </div>
         )}
