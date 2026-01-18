@@ -21,7 +21,6 @@ export class ABSService {
       baseUrl = `https://${baseUrl}`;
     }
 
-    // Explicitly set credentials to 'omit' to prevent CORS header conflicts
     const response = await fetch(`${baseUrl}/login`, {
       method: 'POST',
       mode: 'cors',
@@ -41,32 +40,36 @@ export class ABSService {
     return response.json();
   }
 
-  private async fetchApi(endpoint: string, options: RequestInit = {}) {
+  private async fetchApi(endpoint: string, options: RequestInit = {}, silent404 = false) {
     const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
     const url = `${this.serverUrl}${path}`;
 
-    const response = await fetch(url, {
-      ...options,
-      mode: 'cors',
-      credentials: 'omit', // Stay consistent to avoid CORS issues
-      headers: {
-        'Authorization': `Bearer ${this.token}`,
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
-    });
+    try {
+      const response = await fetch(url, {
+        ...options,
+        mode: 'cors',
+        credentials: 'omit',
+        headers: {
+          'Authorization': `Bearer ${this.token}`,
+          'Content-Type': 'application/json',
+          ...options.headers,
+        },
+      });
 
-    if (!response.ok) {
-      if (response.status === 404) return null;
-      const errorText = await response.text().catch(() => 'Error');
-      throw new Error(`ABS API Error (${response.status}): ${errorText}`);
-    }
+      if (!response.ok) {
+        if (response.status === 404) return null;
+        throw new Error(`ABS API Error (${response.status})`);
+      }
 
-    const contentType = response.headers.get("content-type");
-    if (contentType && contentType.includes("application/json")) {
-      return response.json();
+      const contentType = response.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        return response.json();
+      }
+      return response.text();
+    } catch (e) {
+      if (!silent404) console.debug("API Fetch Warning:", e);
+      return null;
     }
-    return response.text();
   }
 
   async ensureLibraryId(): Promise<string> {
@@ -98,12 +101,7 @@ export class ABSService {
   }
 
   async getProgress(id: string): Promise<any> {
-    try {
-      const res = await this.fetchApi(`/api/users/me/progress/${id}`);
-      return res;
-    } catch (e) {
-      return null;
-    }
+    return this.fetchApi(`/api/users/me/progress/${id}`, {}, true);
   }
 
   async saveProgress(itemId: string, currentTime: number, duration: number): Promise<void> {
