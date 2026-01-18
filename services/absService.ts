@@ -95,6 +95,12 @@ export class ABSService {
     return this.fetchApi(`/api/items/${id}`);
   }
 
+  async getUserHistory(): Promise<any[]> {
+    // Fetches recent sessions/history for the user
+    const data = await this.fetchApi('/api/users/me/history');
+    return data || [];
+  }
+
   async getSeries(): Promise<ABSSeries[]> {
     const libId = await this.ensureLibraryId();
     const data = await this.fetchApi(`/api/libraries/${libId}/series`);
