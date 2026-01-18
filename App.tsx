@@ -13,7 +13,6 @@ const App: React.FC = () => {
   const [isInitializing, setIsInitializing] = useState(true);
 
   useEffect(() => {
-    // Attempt to restore session from localStorage
     const savedAuth = localStorage.getItem('rs_auth');
     if (savedAuth) {
       try {
@@ -74,25 +73,26 @@ const App: React.FC = () => {
   };
 
   if (isInitializing) {
-    return <div className="min-h-screen bg-black flex items-center justify-center font-black text-aether-purple animate-pulse">LOADING...</div>;
+    return <div className="min-h-screen bg-black flex items-center justify-center font-black text-purple-500 animate-pulse">LOADING...</div>;
   }
 
   return (
-    <div className="min-h-screen bg-black text-white selection:bg-purple-900 flex flex-col overflow-hidden font-sans">
+    // Changed overflow-hidden to overflow-y-auto to fix scrolling
+    <div className="min-h-screen bg-black text-white selection:bg-purple-900 flex flex-col overflow-y-auto font-sans">
       {showInstallBanner && screen !== AppScreen.PLAYER && (
         <div className="fixed bottom-6 left-6 right-6 z-[100] animate-slide-up">
-          <div className="bg-neutral-900/95 backdrop-blur-xl border border-white/10 p-5 rounded-[28px] shadow-[0_20px_50px_rgba(0,0,0,0.8),0_0_20px_rgba(157,80,187,0.2)] flex items-center justify-between gap-4">
+          <div className="bg-neutral-900/95 backdrop-blur-xl border border-white/10 p-5 rounded-[28px] shadow-[0_20px_50px_rgba(0,0,0,0.8)] flex items-center justify-between gap-4">
             <div className="flex-1">
               <h4 className="text-[13px] font-black uppercase tracking-wider text-white mb-0.5">Experience R.S Audiobooks</h4>
-              <p className="text-[11px] text-neutral-400 font-medium leading-tight">Install to your home screen for background playback and a full-screen experience.</p>
+              <p className="text-[11px] text-neutral-400 font-medium leading-tight">Install to your home screen for background playback.</p>
             </div>
             <div className="flex items-center gap-2">
-              <button onClick={dismissBanner} className="p-2 text-neutral-500 hover:text-white transition-colors">
+              <button onClick={dismissBanner} className="p-2 text-neutral-500 hover:text-white">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
-              <button onClick={installPWA} className="gradient-aether px-5 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest text-white shadow-[0_4px_15px_rgba(157,80,187,0.4)] active:scale-95 transition-all">
+              <button onClick={installPWA} className="bg-purple-600 px-5 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest text-white shadow-lg active:scale-95 transition-all">
                 Install
               </button>
             </div>
