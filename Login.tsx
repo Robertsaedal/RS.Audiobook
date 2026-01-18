@@ -29,7 +29,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
       }
 
       // Explicitly using credentials: 'include' and ensuring exact payload keys
-      const response = await fetch(`${cleanUrl}/api/login`, {
+      const response = await fetch(`${cleanUrl}/login`, {
         method: 'POST',
         credentials: 'include',
         headers: { 
