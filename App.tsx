@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { AppScreen, AuthState, ABSLibraryItem } from './types';
 import Login from './components/Login';
@@ -110,16 +109,6 @@ const App: React.FC = () => {
       {screen === AppScreen.PLAYER && auth && selectedItem && (
         <Player auth={auth} item={selectedItem} onBack={() => setScreen(AppScreen.LIBRARY)} />
       )}
-
-      <style dangerouslySetInnerHTML={{ __html: `
-        @keyframes slide-up {
-          from { transform: translateY(100%); opacity: 0; }
-          to { transform: translateY(0); opacity: 1; }
-        }
-        .animate-slide-up {
-          animation: slide-up 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-        }
-      `}} />
     </div>
   );
 };
