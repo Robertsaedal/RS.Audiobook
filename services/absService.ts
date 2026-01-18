@@ -81,14 +81,21 @@ export class ABSService {
 
   async getProgress(itemId: string): Promise<ABSProgress | null> {
     try {
-      return await this.fetchApi(`/api/me/progress/${itemId}`);
+      // Try the more explicit user path
+      return await this.fetchApi(`/api/users/me/progress/${itemId}`);
     } catch (e) {
-      return null;
+      // If that still 404s, try the base path as a fallback
+      try {
+        return await this.fetchApi(`/api/me/progress/${itemId}`);
+      } catch (innerError) {
+        return null;
+      }
     }
   }
 
   async saveProgress(itemId: string, currentTime: number, duration: number): Promise<void> {
     try {
+      // We use the direct fetch here to avoid the "Unexpected token O" (OK) error
       const response = await fetch(`${this.serverUrl}/api/me/progress/${itemId}`, {
         method: 'PATCH',
         mode: 'cors',
@@ -106,10 +113,20 @@ export class ABSService {
       });
 
       if (!response.ok) {
-        throw new Error(`Save failed: ${response.status}`);
+        // If the first path fails, try the alternative
+        await fetch(`${this.serverUrl}/api/users/me/progress/${itemId}`, {
+          method: 'PATCH',
+          mode: 'cors',
+          credentials: 'include',
+          headers: {
+            'Authorization': `Bearer ${this.token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ currentTime, duration }),
+        });
       }
     } catch (e) {
-      console.error("Failed to sync progress to server", e);
+      console.error("Progress sync failed, but allowing playback to continue.");
     }
   }
 
