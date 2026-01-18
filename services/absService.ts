@@ -66,7 +66,6 @@ export class ABSService {
   }
 
   async getLibraryItems(): Promise<ABSLibraryItem[]> {
-    // Adding include=progress to get progress in the initial list call
     const data = await this.fetchApi(`/api/libraries/${this.libraryId}/items?include=progress`);
     return data.results || data;
   }
@@ -76,25 +75,20 @@ export class ABSService {
   }
 
   async getSeries(): Promise<ABSSeries[]> {
-    // Most ABS versions use this path for library-specific series
     const data = await this.fetchApi(`/api/libraries/${this.libraryId}/series`);
-    // Ensure we return an array even if the response is nested
     return data.results || (Array.isArray(data) ? data : []);
   }
 
   async getProgress(id: string): Promise<any> {
-  try {
-    return await this.fetchApi(`/api/users/me/progress/${id}`);
-  } catch (e) {
-    // Return null so the Player knows to start at 0
-    return null;
-  }
-}
+    try {
+      return await this.fetchApi(`/api/users/me/progress/${id}`);
+    } catch (e) {
+      return null;
+    }
   }
 
   async saveProgress(itemId: string, currentTime: number, duration: number): Promise<void> {
     try {
-      // We use the direct fetch here to avoid the "Unexpected token O" (OK) error
       const response = await fetch(`${this.serverUrl}/api/me/progress/${itemId}`, {
         method: 'PATCH',
         mode: 'cors',
@@ -112,7 +106,7 @@ export class ABSService {
       });
 
       if (!response.ok) {
-        // If the first path fails, try the alternative
+        // Fallback for different ABS server versions
         await fetch(`${this.serverUrl}/api/users/me/progress/${itemId}`, {
           method: 'PATCH',
           mode: 'cors',
@@ -130,9 +124,8 @@ export class ABSService {
   }
 
   getAudioUrl(itemId: string, audioFileId: string): string {
-  // Use the standard API endpoint that includes the token for authentication
-  return `${this.serverUrl}/api/items/${itemId}/file/${audioFileId}?token=${this.token}`;
-}
+    return `${this.serverUrl}/api/items/${itemId}/file/${audioFileId}?token=${this.token}`;
+  }
 
   getCoverUrl(itemId: string): string {
     return `${this.serverUrl}/api/items/${itemId}/cover?token=${this.token}`;
