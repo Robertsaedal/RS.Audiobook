@@ -11,7 +11,6 @@ interface LibraryProps {
 
 const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
   const [items, setItems] = useState<ABSLibraryItem[]>([]);
-  const [series, setSeries] = useState<ABSSeries[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'RECENT' | 'SERIES' | 'HISTORY'>('RECENT');
   const [searchTerm, setSearchTerm] = useState('');
@@ -23,12 +22,8 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [libraryItems, seriesList] = await Promise.all([
-          absService.getLibraryItems(),
-          absService.getSeries()
-        ]);
+        const libraryItems = await absService.getLibraryItems();
         setItems(libraryItems);
-        setSeries(seriesList);
       } catch (e) {
         console.error("Fetch failed", e);
       } finally {
@@ -51,87 +46,56 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
     );
   }, [items, searchTerm]);
 
-  // Comprehensive Series Grouping Logic
+  // STRICT SERIES GROUPING LOGIC
   const processedSeries = useMemo(() => {
-    const groups: Record<string, any> = {};
+    const seriesMap: Record<string, ABSLibraryItem[]> = {};
     
-    // Helper to add book to group
-    const addToGroup = (seriesName: string, itemId: string) => {
-      const name = seriesName || 'Standalone';
-      if (!groups[name]) {
-        groups[name] = {
-          id: `series-${name}`,
-          name: name,
-          libraryItemIds: [],
-          isStandalone: name === 'Standalone'
-        };
-      }
-      if (!groups[name].libraryItemIds.includes(itemId)) {
-        groups[name].libraryItemIds.push(itemId);
-      }
-    };
-
-    // 1. Try to use API series data if available
-    if (series.length > 0) {
-      series.forEach(s => {
-        s.libraryItemIds.forEach(id => addToGroup(s.name, id));
-      });
-    }
-
-    // 2. Scan library items for metadata series names (covers gaps in API)
+    // Group strictly by seriesName metadata
     items.forEach(item => {
-      if (item.media.metadata.seriesName) {
-        addToGroup(item.media.metadata.seriesName, item.id);
-      } else {
-        addToGroup('Standalone', item.id);
+      const name = item.media.metadata.seriesName || 'Standalone';
+      if (!seriesMap[name]) {
+        seriesMap[name] = [];
       }
+      seriesMap[name].push(item);
     });
 
-    // Post-process groups: Sort books by sequence and get cover
-    return Object.values(groups).map(g => {
-      const gItems = items.filter(i => g.libraryItemIds.includes(i.id))
-        .sort((a, b) => {
-          const seqA = parseFloat(a.media.metadata.sequence || '0');
-          const seqB = parseFloat(b.media.metadata.sequence || '0');
-          return seqA - seqB;
-        });
-      
+    // Convert map to array and apply sorting
+    return Object.entries(seriesMap).map(([name, groupItems]) => {
+      // Sort books within the group by sequence number
+      const sortedItems = [...groupItems].sort((a, b) => {
+        const seqA = parseFloat(a.media.metadata.sequence || '0') || 0;
+        const seqB = parseFloat(b.media.metadata.sequence || '0') || 0;
+        return seqA - seqB;
+      });
+
       return {
-        ...g,
-        libraryItemIds: gItems.map(i => i.id),
-        coverUrl: gItems.length > 0 ? absService.getCoverUrl(gItems[0].id) : '',
-        bookCount: gItems.length
+        id: `series-${name}`,
+        name: name,
+        items: sortedItems,
+        bookCount: sortedItems.length,
+        // Use the cover of the first book in the sequence
+        coverUrl: absService.getCoverUrl(sortedItems[0].id),
+        isStandalone: name === 'Standalone'
       };
     }).sort((a, b) => {
-      if (a.name === 'Standalone') return 1;
-      if (b.name === 'Standalone') return -1;
+      // Sort the grid alphabetical, keeping Standalone at the end
+      if (a.isStandalone) return 1;
+      if (b.isStandalone) return -1;
       return a.name.localeCompare(b.name);
     });
-  }, [series, items, absService]);
+  }, [items, absService]);
 
-  // Filtered series for search
+  // Filtered series for search integration
   const filteredSeriesList = useMemo(() => {
     const term = searchTerm.toLowerCase();
     return processedSeries.filter(s => {
-      // Matches series name
       if (s.name.toLowerCase().includes(term)) return true;
-      // OR matches any book inside the series
-      return s.libraryItemIds.some(id => {
-        const item = items.find(i => i.id === id);
-        return item?.media?.metadata?.title?.toLowerCase().includes(term);
-      });
+      return s.items.some(item => 
+        item.media.metadata.title.toLowerCase().includes(term) ||
+        item.media.metadata.authorName.toLowerCase().includes(term)
+      );
     });
-  }, [processedSeries, searchTerm, items]);
-
-  const seriesItems = useMemo(() => {
-    if (!selectedSeries) return [];
-    return items.filter(item => selectedSeries.libraryItemIds.includes(item.id))
-      .sort((a, b) => {
-        const seqA = parseFloat(a.media.metadata.sequence || '0');
-        const seqB = parseFloat(b.media.metadata.sequence || '0');
-        return seqA - seqB;
-      });
-  }, [selectedSeries, items]);
+  }, [processedSeries, searchTerm]);
 
   const handleBookSelect = (item: ABSLibraryItem) => {
     const savedHistory = JSON.parse(localStorage.getItem('rs_history') || '[]');
@@ -219,10 +183,10 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
                     </button>
                     <div className="mb-10">
                       <h3 className="text-2xl font-black uppercase tracking-tight text-white leading-tight mb-2">{selectedSeries.name}</h3>
-                      <p className="text-[10px] font-black text-neutral-600 uppercase tracking-[0.3em]">Collection of {selectedSeries.bookCount} Books</p>
+                      <p className="text-[10px] font-black text-neutral-600 uppercase tracking-[0.3em]">{selectedSeries.bookCount} {selectedSeries.bookCount === 1 ? 'Book' : 'Books'} Total</p>
                     </div>
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-8">
-                      {seriesItems.map(item => (
+                      {selectedSeries.items.map((item: ABSLibraryItem) => (
                         <BookCard key={item.id} item={item} onClick={() => handleBookSelect(item)} coverUrl={absService.getCoverUrl(item.id)} showSequence />
                       ))}
                     </div>
@@ -237,7 +201,7 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
               </>
             )}
 
-            {!loading && filteredItems.length === 0 && activeTab === 'RECENT' && <EmptyState message="No items found" sub="Check your server connection or library" />}
+            {!loading && filteredItems.length === 0 && activeTab === 'RECENT' && <EmptyState message="No items found" sub="Check your search or library" />}
           </>
         )}
       </div>
@@ -251,14 +215,12 @@ const BookCard: React.FC<{ item: ABSLibraryItem, onClick: () => void, coverUrl: 
       <img src={coverUrl} alt={item.media.metadata.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" loading="lazy" />
       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-80" />
       
-      {/* Sequence Badge */}
       {item.media.metadata.sequence && (
         <div className="absolute top-3 left-3 bg-aether-purple px-2 py-0.5 rounded-lg border border-white/20 shadow-xl z-10">
           <span className="text-[9px] font-black text-white">#{item.media.metadata.sequence}</span>
         </div>
       )}
 
-      {/* Series View Specific Label */}
       {showSequence && item.media.metadata.sequence && (
         <div className="absolute bottom-3 left-3 right-3 bg-black/60 backdrop-blur-md px-2 py-1.5 rounded-xl border border-white/5">
           <p className="text-[8px] font-black text-aether-purple uppercase tracking-[0.2em] text-center">Book {item.media.metadata.sequence}</p>
@@ -281,14 +243,13 @@ const SeriesCard: React.FC<{ series: any, onClick: () => void }> = ({ series, on
         </div>
       )}
       
-      {/* Book Count Badge */}
       <div className="absolute top-3 right-3 bg-white/10 backdrop-blur-md px-2 py-1 rounded-xl border border-white/10 shadow-lg">
         <p className="text-[8px] font-black text-white uppercase tracking-widest">{series.bookCount} {series.bookCount === 1 ? 'Book' : 'Books'}</p>
       </div>
 
       <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent flex flex-col justify-end p-5">
         <h3 className="text-[12px] font-black line-clamp-2 uppercase tracking-tight text-white leading-tight mb-1">{series.name}</h3>
-        <p className="text-[8px] font-black uppercase tracking-[0.2em] text-aether-purple drop-shadow-sm">{series.isStandalone ? 'Miscellaneous' : 'Collection'}</p>
+        <p className="text-[8px] font-black uppercase tracking-[0.2em] text-aether-purple drop-shadow-sm">{series.isStandalone ? 'Misc' : 'Collection'}</p>
       </div>
     </div>
   </button>
