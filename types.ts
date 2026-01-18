@@ -13,7 +13,8 @@ export interface ABSChapter {
 }
 
 export interface ABSAudioFile {
-  id: string;
+  id?: string;
+  ino?: string;
   index: number;
   duration: number;
   metadata?: any;
