@@ -25,13 +25,23 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
   const duration = item.media.duration || 0;
 
   const audioUrl = useMemo(() => {
-    if (!detailedItem) return null;
-    const audioFiles = detailedItem.media.audioFiles || [];
+    if (!detailedItem || !detailedItem.media || !detailedItem.media.audioFiles) return null;
+    const audioFiles = detailedItem.media.audioFiles;
     if (audioFiles.length === 0) return null;
     
     // Sort by index to play the first file
     const sortedFiles = [...audioFiles].sort((a, b) => (a.index || 0) - (b.index || 0));
-    return `${auth.serverUrl}/api/items/${item.id}/file/${sortedFiles[0].id}?token=${auth.user?.token}`;
+    const firstFile = sortedFiles[0];
+    
+    // ABS uses 'ino' or 'id' for the file endpoint
+    const fileId = firstFile.id || firstFile.ino;
+    
+    if (!fileId) {
+      console.warn("No file identifier (id or ino) found for audio file");
+      return null;
+    }
+    
+    return `${auth.serverUrl}/api/items/${item.id}/file/${fileId}?token=${auth.user?.token}`;
   }, [detailedItem, item.id, auth]);
   
   const coverUrl = useMemo(() => absService.getCoverUrl(item.id), [item.id, absService]);
@@ -47,7 +57,7 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
         ]);
         
         if (isMounted.current) {
-          if (detailsResult.status === 'fulfilled') {
+          if (detailsResult.status === 'fulfilled' && detailsResult.value) {
             setDetailedItem(detailsResult.value);
             if (detailsResult.value.media.chapters) {
               setChapters(detailsResult.value.media.chapters);
@@ -56,8 +66,11 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
           
           if (progressResult.status === 'fulfilled' && progressResult.value && audioRef.current) {
             const savedTime = progressResult.value.currentTime || 0;
-            audioRef.current.currentTime = savedTime;
-            setCurrentTime(savedTime);
+            // Only set if valid number
+            if (!isNaN(savedTime) && savedTime > 0) {
+              audioRef.current.currentTime = savedTime;
+              setCurrentTime(savedTime);
+            }
           }
         }
       } catch (e) { 
@@ -83,7 +96,7 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
   }, [isPlaying, item.id, duration, absService]);
 
   const togglePlay = async () => {
-    if (!audioRef.current) return;
+    if (!audioRef.current || !audioUrl) return;
     try {
       if (isPlaying) {
         audioRef.current.pause();
@@ -102,7 +115,7 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
   };
 
   const formatTime = (s: number) => {
-    if (!s || isNaN(s)) return "00:00";
+    if (s === undefined || s === null || isNaN(s)) return "00:00";
     const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = Math.floor(s % 60);
     return `${h > 0 ? h + ':' : ''}${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
   };
@@ -151,55 +164,63 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
           <p className="text-neutral-500 text-[10px] font-black uppercase tracking-[0.3em] mt-2">{item.media.metadata.authorName}</p>
         </div>
 
-        <div className="w-full mb-12">
-          <div className="text-6xl font-black tabular-nums mb-6 tracking-tighter text-center">
-            {formatTime(currentTime)}
+        {!audioUrl ? (
+          <div className="w-full p-6 bg-red-900/10 border border-red-900/20 rounded-3xl text-center">
+            <p className="text-red-500 text-[10px] font-black uppercase tracking-widest">Error: No playable audio file found</p>
           </div>
-          <div 
-            className="h-2 w-full bg-neutral-900/50 rounded-full overflow-hidden cursor-pointer relative"
-            onClick={(e) => {
-              const rect = e.currentTarget.getBoundingClientRect();
-              const pos = (e.clientX - rect.left) / rect.width;
-              if (audioRef.current) audioRef.current.currentTime = pos * duration;
-            }}
-          >
-            <div 
-              className="h-full gradient-aether shadow-[0_0_15px_rgba(157,80,187,0.5)] transition-all duration-300 ease-out" 
-              style={{ width: `${(currentTime / (duration || 1)) * 100}%` }} 
-            />
-          </div>
-          <div className="flex justify-between mt-3 px-1">
-            <span className="text-[9px] font-black text-neutral-600 tabular-nums">{formatTime(currentTime)}</span>
-            <span className="text-[9px] font-black text-neutral-600 tabular-nums">-{formatTime(duration - currentTime)}</span>
-          </div>
-        </div>
+        ) : (
+          <>
+            <div className="w-full mb-12">
+              <div className="text-6xl font-black tabular-nums mb-6 tracking-tighter text-center">
+                {formatTime(currentTime)}
+              </div>
+              <div 
+                className="h-2 w-full bg-neutral-900/50 rounded-full overflow-hidden cursor-pointer relative"
+                onClick={(e) => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const pos = (e.clientX - rect.left) / rect.width;
+                  if (audioRef.current) audioRef.current.currentTime = pos * duration;
+                }}
+              >
+                <div 
+                  className="h-full gradient-aether shadow-[0_0_15px_rgba(157,80,187,0.5)] transition-all duration-300 ease-out" 
+                  style={{ width: `${(currentTime / (duration || 1)) * 100}%` }} 
+                />
+              </div>
+              <div className="flex justify-between mt-3 px-1">
+                <span className="text-[9px] font-black text-neutral-600 tabular-nums">{formatTime(currentTime)}</span>
+                <span className="text-[9px] font-black text-neutral-600 tabular-nums">-{formatTime(duration - currentTime)}</span>
+              </div>
+            </div>
 
-        <div className="flex items-center gap-10">
-          <button 
-            onClick={() => audioRef.current && (audioRef.current.currentTime -= 15)} 
-            className="text-neutral-500 hover:text-white active:scale-90 transition-all p-4"
-          >
-            <svg className="w-7 h-7" fill="currentColor" viewBox="0 0 24 24"><path d="M12.5 8c-2.65 0-5.05 1-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/></svg>
-          </button>
-          
-          <button 
-            onClick={togglePlay} 
-            className="w-24 h-24 gradient-aether rounded-full flex items-center justify-center shadow-[0_20px_40px_rgba(157,80,187,0.3)] active:scale-95 transition-all"
-          >
-            {isPlaying ? (
-              <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
-            ) : (
-              <svg className="w-8 h-8 text-white translate-x-1" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-            )}
-          </button>
+            <div className="flex items-center gap-10">
+              <button 
+                onClick={() => audioRef.current && (audioRef.current.currentTime -= 15)} 
+                className="text-neutral-500 hover:text-white active:scale-90 transition-all p-4"
+              >
+                <svg className="w-7 h-7" fill="currentColor" viewBox="0 0 24 24"><path d="M12.5 8c-2.65 0-5.05 1-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/></svg>
+              </button>
+              
+              <button 
+                onClick={togglePlay} 
+                className="w-24 h-24 gradient-aether rounded-full flex items-center justify-center shadow-[0_20px_40px_rgba(157,80,187,0.3)] active:scale-95 transition-all"
+              >
+                {isPlaying ? (
+                  <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                ) : (
+                  <svg className="w-8 h-8 text-white translate-x-1" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                )}
+              </button>
 
-          <button 
-            onClick={() => audioRef.current && (audioRef.current.currentTime += 30)} 
-            className="text-neutral-500 hover:text-white active:scale-90 transition-all p-4"
-          >
-            <svg className="w-7 h-7" fill="currentColor" viewBox="0 0 24 24"><path d="M11.5 8c2.65 0 5.05 1 6.9 2.6L22 7v9h-9l3.62-3.62c-1.39-1.16-3.16-1.88-5.12-1.88-3.54 0-6.55 2.31-7.6 5.5l-2.37-.78C2.92 11.03 6.85 8 11.5 8z"/></svg>
-          </button>
-        </div>
+              <button 
+                onClick={() => audioRef.current && (audioRef.current.currentTime += 30)} 
+                className="text-neutral-500 hover:text-white active:scale-90 transition-all p-4"
+              >
+                <svg className="w-7 h-7" fill="currentColor" viewBox="0 0 24 24"><path d="M11.5 8c2.65 0 5.05 1 6.9 2.6L22 7v9h-9l3.62-3.62c-1.39-1.16-3.16-1.88-5.12-1.88-3.54 0-6.55 2.31-7.6 5.5l-2.37-.78C2.92 11.03 6.85 8 11.5 8z"/></svg>
+              </button>
+            </div>
+          </>
+        )}
       </div>
 
       {showChapters && (
