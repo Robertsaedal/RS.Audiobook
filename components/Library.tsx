@@ -46,57 +46,51 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
     );
   }, [items, searchTerm]);
 
-  // STRICT SERIES GROUPING LOGIC
-  const processedSeries = useMemo(() => {
+  // STACKED SERIES GROUPING LOGIC
+  const seriesGroups = useMemo(() => {
     const seriesMap: Record<string, ABSLibraryItem[]> = {};
     
-    // Group strictly by seriesName metadata or series array entries
     items.forEach(item => {
-      // Check metadata seriesName first, then the series array if available (from include=series)
-      const name = item.media.metadata.seriesName || (item as any).series?.[0]?.name || 'Standalone';
-      if (!seriesMap[name]) {
-        seriesMap[name] = [];
+      // Use metadata seriesName OR fallback to the first entry in the series array
+      const sName = item.media.metadata.seriesName || (item as any).series?.[0]?.name;
+      
+      // Skip if no series name is present
+      if (!sName) return;
+
+      if (!seriesMap[sName]) {
+        seriesMap[sName] = [];
       }
-      seriesMap[name].push(item);
+      seriesMap[sName].push(item);
     });
 
-    // Convert map to array and apply sorting
     return Object.entries(seriesMap).map(([name, groupItems]) => {
-      // Sort books within the group by sequence number
-      const sortedItems = [...groupItems].sort((a, b) => {
-        const seqA = parseFloat(a.media.metadata.sequence || '0') || 0;
-        const seqB = parseFloat(b.media.metadata.sequence || '0') || 0;
+      // Sort items within this series by their sequence number
+      const sorted = [...groupItems].sort((a, b) => {
+        const seqA = parseFloat(a.media.metadata.sequence || '0');
+        const seqB = parseFloat(b.media.metadata.sequence || '0');
         return seqA - seqB;
       });
 
       return {
-        id: `series-${name}`,
+        id: `group-${name}`,
         name: name,
-        items: sortedItems,
-        bookCount: sortedItems.length,
-        // Use the cover of the first book in the sequence
-        coverUrl: absService.getCoverUrl(sortedItems[0].id),
-        isStandalone: name === 'Standalone'
+        items: sorted,
+        bookCount: sorted.length,
+        // The first book in the sorted list provides the primary cover
+        coverUrl: absService.getCoverUrl(sorted[0].id)
       };
-    }).sort((a, b) => {
-      // Sort alphabetical, keeping Standalone at the end
-      if (a.isStandalone) return 1;
-      if (b.isStandalone) return -1;
-      return a.name.localeCompare(b.name);
-    });
+    }).sort((a, b) => a.name.localeCompare(b.name));
   }, [items, absService]);
 
-  // Filtered series for search integration
-  const filteredSeriesList = useMemo(() => {
+  // Filter series for search bar
+  const filteredSeries = useMemo(() => {
     const term = searchTerm.toLowerCase();
-    return processedSeries.filter(s => {
-      if (s.name.toLowerCase().includes(term)) return true;
-      return s.items.some(item => 
-        item.media.metadata.title.toLowerCase().includes(term) ||
-        item.media.metadata.authorName.toLowerCase().includes(term)
-      );
-    });
-  }, [processedSeries, searchTerm]);
+    if (!term) return seriesGroups;
+    return seriesGroups.filter(g => 
+      g.name.toLowerCase().includes(term) ||
+      g.items.some(i => i.media.metadata.title.toLowerCase().includes(term))
+    );
+  }, [seriesGroups, searchTerm]);
 
   const handleBookSelect = (item: ABSLibraryItem) => {
     const savedHistory = JSON.parse(localStorage.getItem('rs_history') || '[]');
@@ -184,7 +178,7 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
                     </button>
                     <div className="mb-10">
                       <h3 className="text-2xl font-black uppercase tracking-tight text-white leading-tight mb-2">{selectedSeries.name}</h3>
-                      <p className="text-[10px] font-black text-neutral-600 uppercase tracking-[0.3em]">{selectedSeries.bookCount} {selectedSeries.bookCount === 1 ? 'Book' : 'Books'} Total</p>
+                      <p className="text-[10px] font-black text-neutral-600 uppercase tracking-[0.3em]">{selectedSeries.bookCount} {selectedSeries.bookCount === 1 ? 'Book' : 'Books'} in this collection</p>
                     </div>
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-6 gap-y-10">
                       {selectedSeries.items.map((item: ABSLibraryItem) => (
@@ -193,9 +187,9 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
                     </div>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-6 gap-y-10">
-                    {filteredSeriesList.map(s => (
-                      <SeriesCard key={s.id} series={s} onClick={() => setSelectedSeries(s)} />
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-6 gap-y-12">
+                    {filteredSeries.map(group => (
+                      <SeriesStackCard key={group.id} group={group} onClick={() => setSelectedSeries(group)} />
                     ))}
                   </div>
                 )}
@@ -232,45 +226,43 @@ const BookCard: React.FC<{ item: ABSLibraryItem, onClick: () => void, coverUrl: 
   </button>
 );
 
-const SeriesCard: React.FC<{ series: any, onClick: () => void }> = ({ series, onClick }) => (
+const SeriesStackCard: React.FC<{ group: any, onClick: () => void }> = ({ group, onClick }) => (
   <button onClick={onClick} className="flex flex-col text-left group transition-all active:scale-95 animate-fade-in">
     <div className="aspect-[2/3] w-full mb-4 relative transition-all">
       
-      {/* Visual Stacks (The effect of multiple books behind the first one) */}
-      {!series.isStandalone && series.bookCount > 1 && (
+      {/* Stack Visual Effect (Book layers behind the main one) */}
+      {group.bookCount > 1 && (
         <>
-            <div className="absolute inset-0 bg-neutral-800/40 rounded-3xl translate-x-4 -translate-y-2 border border-white/10" />
-            <div className="absolute inset-0 bg-neutral-800/70 rounded-3xl translate-x-2 -translate-y-1 border border-white/10" />
+          <div className="absolute inset-0 bg-neutral-800/40 rounded-3xl translate-x-4 -translate-y-2 border border-white/10" />
+          <div className="absolute inset-0 bg-neutral-800/70 rounded-3xl translate-x-2 -translate-y-1 border border-white/10" />
         </>
       )}
 
-      {/* Main Cover Container */}
+      {/* Main Front Cover */}
       <div className="absolute inset-0 bg-neutral-900 rounded-3xl overflow-hidden shadow-[0_20px_40px_rgba(0,0,0,0.6)] border border-white/5 group-hover:border-aether-purple/50 transition-all z-10">
-        {series.coverUrl ? (
-            <img src={series.coverUrl} alt={series.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" loading="lazy" />
+        {group.coverUrl ? (
+          <img src={group.coverUrl} alt={group.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" loading="lazy" />
         ) : (
-            <div className="w-full h-full flex items-center justify-center text-neutral-800">
-                <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
-            </div>
+          <div className="w-full h-full flex items-center justify-center text-neutral-800">
+            <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
+          </div>
         )}
         
-        {/* Bottom Label Overlay (Collection/Misc) */}
+        {/* Collection Badge at Bottom Overlay */}
         <div className="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-black/80 via-black/20 to-transparent">
-             <p className="text-[8px] font-black uppercase tracking-[0.2em] text-aether-purple drop-shadow-sm">
-                {series.isStandalone ? 'COLLECTION' : 'COLLECTION'}
-             </p>
+             <p className="text-[8px] font-black uppercase tracking-[0.2em] text-aether-purple drop-shadow-sm">COLLECTION</p>
         </div>
       </div>
       
-      {/* Gold Book Count Badge (Top Right as per requested reference image) */}
-      <div className="absolute -top-1 -right-1 bg-[#b28a47] px-2.5 py-1 rounded-lg shadow-xl z-20 border border-black/20 transform translate-x-1 -translate-y-1">
-        <p className="text-[12px] font-black text-black leading-none">{series.bookCount}</p>
+      {/* Circular Gold/Orange Book Count Badge (Top Right) */}
+      <div className="absolute -top-1 -right-1 bg-[#b28a47] w-7 h-7 flex items-center justify-center rounded-full shadow-xl z-20 border border-black/20 transform translate-x-1 -translate-y-1">
+        <p className="text-[12px] font-black text-black leading-none">{group.bookCount}</p>
       </div>
     </div>
 
-    {/* Title below card as per requested reference image */}
+    {/* Series Name Label (Below the Card) */}
     <div className="px-1 text-center mt-2">
-      <h3 className="text-[14px] font-bold line-clamp-1 group-hover:text-aether-purple transition-colors leading-tight text-white/90">{series.name}</h3>
+      <h3 className="text-[14px] font-bold line-clamp-1 group-hover:text-aether-purple transition-colors leading-tight text-white/90">{group.name}</h3>
     </div>
   </button>
 );
