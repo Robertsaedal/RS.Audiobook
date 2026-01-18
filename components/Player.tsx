@@ -63,7 +63,11 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
     initPlayer();
   }, [item.id, absService]);
 
-  // Periodic Progress Sync
+  // Periodic Progress Sync - Fixed closure for Vercel Build
   useEffect(() => {
     if (isPlaying) {
-      syncIntervalRef.current
+      syncIntervalRef.current = window.setInterval(() => {
+        if (audioRef.current) {
+          absService.saveProgress(item.id, audioRef.current.currentTime, duration);
+        }
+      }, 10000);
