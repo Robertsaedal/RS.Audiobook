@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { AppScreen, AuthState, ABSLibraryItem } from './types';
 import Login from './components/Login';
@@ -73,18 +74,22 @@ const App: React.FC = () => {
   };
 
   if (isInitializing) {
-    return <div className="min-h-screen bg-black flex items-center justify-center font-black text-purple-500 animate-pulse">LOADING...</div>;
+    return (
+      <div className="min-h-screen bg-black flex flex-col items-center justify-center gap-4">
+        <div className="w-10 h-10 border-4 border-purple-600/20 border-t-purple-600 rounded-full animate-spin" />
+        <p className="font-black text-purple-500 tracking-[0.5em] text-[10px] uppercase">R.S Audio</p>
+      </div>
+    );
   }
 
   return (
-    // Changed overflow-hidden to overflow-y-auto to fix scrolling
     <div className="min-h-screen bg-black text-white selection:bg-purple-900 flex flex-col overflow-y-auto font-sans">
       {showInstallBanner && screen !== AppScreen.PLAYER && (
         <div className="fixed bottom-6 left-6 right-6 z-[100] animate-slide-up">
-          <div className="bg-neutral-900/95 backdrop-blur-xl border border-white/10 p-5 rounded-[28px] shadow-[0_20px_50px_rgba(0,0,0,0.8)] flex items-center justify-between gap-4">
+          <div className="bg-neutral-900/95 backdrop-blur-xl border border-white/10 p-5 rounded-[32px] shadow-[0_20px_50px_rgba(0,0,0,0.8)] flex items-center justify-between gap-4">
             <div className="flex-1">
-              <h4 className="text-[13px] font-black uppercase tracking-wider text-white mb-0.5">Experience R.S Audiobooks</h4>
-              <p className="text-[11px] text-neutral-400 font-medium leading-tight">Install to your home screen for background playback.</p>
+              <h4 className="text-[11px] font-black uppercase tracking-wider text-white mb-0.5">R.S Audio Hub</h4>
+              <p className="text-[10px] text-neutral-400 font-medium leading-tight">Install app for background play.</p>
             </div>
             <div className="flex items-center gap-2">
               <button onClick={dismissBanner} className="p-2 text-neutral-500 hover:text-white">
