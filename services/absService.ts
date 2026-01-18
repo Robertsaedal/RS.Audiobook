@@ -13,6 +13,9 @@ export class ABSService {
     this.token = token;
   }
 
+  /**
+   * Static login method - WORKING WITHOUT /API
+   */
   static async login(serverUrl: string, username: string, password: string): Promise<any> {
     const envUrl = (import.meta as any).env?.VITE_ABS_URL;
     let baseUrl = (serverUrl || envUrl || 'rs-audio-server.duckdns.org').trim().replace(/\/+$/, '');
@@ -67,22 +70,26 @@ export class ABSService {
   }
 
   async getLibraryItems(): Promise<ABSLibraryItem[]> {
-    const data = await this.fetchApi('/items');
+    // Added /api back here
+    const data = await this.fetchApi('/api/items');
     return data.results || data;
   }
 
   async getItemDetails(id: string): Promise<ABSLibraryItem> {
-    return this.fetchApi(`/items/${id}`);
+    // Added /api back here
+    return this.fetchApi(`/api/items/${id}`);
   }
 
   async getSeries(): Promise<ABSSeries[]> {
-    const data = await this.fetchApi('/series');
+    // Added /api back here
+    const data = await this.fetchApi('/api/series');
     return data.results || data;
   }
 
   async getProgress(itemId: string): Promise<ABSProgress | null> {
     try {
-      return await this.fetchApi(`/me/progress/${itemId}`);
+      // Added /api back here
+      return await this.fetchApi(`/api/me/progress/${itemId}`);
     } catch (e) {
       return null;
     }
@@ -90,7 +97,8 @@ export class ABSService {
 
   async saveProgress(itemId: string, currentTime: number, duration: number): Promise<void> {
     try {
-      await this.fetchApi(`/me/progress/${itemId}`, {
+      // Added /api back here
+      await this.fetchApi(`/api/me/progress/${itemId}`, {
         method: 'PATCH',
         body: JSON.stringify({
           currentTime,
@@ -105,10 +113,12 @@ export class ABSService {
   }
 
   getAudioUrl(itemId: string, audioFileId: string): string {
-    return `${this.serverUrl}/items/${itemId}/audio/${audioFileId}?token=${this.token}`;
+    // Added /api back here
+    return `${this.serverUrl}/api/items/${itemId}/audio/${audioFileId}?token=${this.token}`;
   }
 
   getCoverUrl(itemId: string): string {
-    return `${this.serverUrl}/items/${itemId}/cover?token=${this.token}`;
+    // Added /api back here
+    return `${this.serverUrl}/api/items/${itemId}/cover?token=${this.token}`;
   }
-} // <--- Make sure this final bracket is included!
+}
