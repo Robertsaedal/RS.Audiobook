@@ -29,6 +29,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
       }
 
       // Explicitly using credentials: 'include' and ensuring exact payload keys
+      console.log("Current Clean URL is:", cleanUrl);
       const response = await fetch(`${cleanUrl}/login`, {
         method: 'POST',
         credentials: 'include',
