@@ -1,12 +1,13 @@
+
 import React, { useState } from 'react';
 import { AuthState } from '../types';
+import { ABSService } from '../services/absService';
 
 interface LoginProps {
   onLogin: (auth: AuthState) => void;
 }
 
 const Login: React.FC<LoginProps> = ({ onLogin }) => {
-  // Pulls the default from your Vercel Environment Variables
   const [serverUrl, setServerUrl] = useState((import.meta as any).env?.VITE_ABS_URL || '');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -19,50 +20,15 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     setError('');
 
     try {
-      // --- URL CLEANING LOGIC ---
-      let cleanUrl = serverUrl.trim().replace(/\/$/, ''); // Remove trailing slash
-      cleanUrl = cleanUrl.replace(/\/api$/, '');         // Force remove /api if present
-      
+      let cleanUrl = serverUrl.trim().replace(/\/+$/, '').replace(/\/api$/, '');
       if (!cleanUrl) throw new Error('Server URL is required');
-      
       if (!cleanUrl.startsWith('http')) {
         cleanUrl = `https://${cleanUrl}`;
       }
 
-      // This is our test path (no /api)
-      const finalUrl = `${cleanUrl}/login`;
-      console.log("DEBUG: Attempting login at:", finalUrl);
-
-      const response = await fetch(finalUrl, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify({ 
-          username: username.trim(), 
-          password: password 
-        }),
-      });
-
-      if (!response.ok) {
-        // If we get a 404 here, we know your theory was wrong and /api IS needed.
-        if (response.status === 404) {
-          throw new Error('Endpoint not found (404). Try adding /api back.');
-        }
-
-        let errorMsg = 'Invalid credentials or server error';
-        try {
-          const data = await response.json();
-          errorMsg = data.message || errorMsg;
-        } catch (e) {
-          // Fallback if response isn't JSON
-        }
-        throw new Error(errorMsg);
-      }
-
-      const data = await response.json();
+      // Use the static login method from ABSService which is more robust
+      const data = await ABSService.login(cleanUrl, username, password);
+      
       onLogin({
         serverUrl: cleanUrl,
         user: {
@@ -72,7 +38,8 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         }
       });
     } catch (err: any) {
-      setError(err.message);
+      console.error("Login component error:", err);
+      setError(err.message || 'Connection failed');
     } finally {
       setLoading(false);
     }
