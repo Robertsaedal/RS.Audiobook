@@ -1,8 +1,17 @@
 {
+  "cleanUrls": true,
   "rewrites": [
     {
-      "source": "/(sw.js|manifest.json|assets/.*)",
-      "destination": "/$1"
+      "source": "/sw.js",
+      "destination": "/sw.js"
+    },
+    {
+      "source": "/manifest.json",
+      "destination": "/manifest.json"
+    },
+    {
+      "source": "/assets/(.*)",
+      "destination": "/assets/$1"
     },
     {
       "source": "/(.*)",
