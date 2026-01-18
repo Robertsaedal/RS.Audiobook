@@ -34,7 +34,6 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
     fetchData();
   }, [absService]);
 
-  // SYNC: Find the most recent unfinished book for the Home Hero
   const continueListeningItem = useMemo(() => {
     return items
       .filter(item => {
@@ -48,7 +47,6 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
       })[0];
   }, [items]);
 
-  // Recently Added items for Home
   const recentlyAdded = useMemo(() => {
     return [...items].sort((a, b) => (b.addedDate || 0) - (a.addedDate || 0)).slice(0, 6);
   }, [items]);
@@ -108,7 +106,7 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
         <div className="flex justify-between items-center">
           <div>
             <h2 className="text-2xl font-black tracking-tight text-aether-purple drop-shadow-aether-glow">R.S AUDIOBOOKS</h2>
-            <p className="text-[8px] uppercase tracking-[0.4em] text-neutral-600 font-black">Digital Audiobookshelf Hub</p>
+            <p className="text-[8px] uppercase tracking-[0.4em] text-neutral-600 font-black">Digital Hub</p>
           </div>
           <button onClick={onLogout} className="text-[10px] font-black uppercase tracking-widest text-neutral-600 hover:text-white transition-colors">
             Logout
@@ -176,7 +174,6 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
                         <h4 className="text-2xl sm:text-3xl font-black uppercase tracking-tight text-white mb-2 line-clamp-1">{continueListeningItem.media.metadata.title}</h4>
                         <p className="text-[11px] font-black text-neutral-400 uppercase tracking-widest mb-6">{continueListeningItem.media.metadata.authorName}</p>
                         
-                        {/* MINI PROGRESS BAR */}
                         {(continueListeningItem as any).userProgress && (
                            <div className="w-full max-w-[200px] h-1 bg-white/10 rounded-full overflow-hidden">
                               <div 
@@ -193,11 +190,10 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
                   </div>
                 ) : (
                   <div className="bg-neutral-900/40 rounded-[40px] p-12 text-center border border-white/5">
-                    <p className="text-[10px] font-black uppercase tracking-[0.4em] text-neutral-600">Start a new journey in the Books tab</p>
+                    <p className="text-[10px] font-black uppercase tracking-[0.4em] text-neutral-600">Explore the library in the Books tab</p>
                   </div>
                 )}
 
-                {/* RECENTLY ADDED SECTION */}
                 <div className="space-y-6">
                   <div className="flex justify-between items-center">
                     <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-neutral-600">Recently Added</h3>
@@ -212,7 +208,7 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
               </div>
             )}
 
-            {activeTab === 'BOOKS' || (activeTab === 'HOME' && searchTerm) ? (
+            {(activeTab === 'BOOKS' || (activeTab === 'HOME' && searchTerm)) && (
               <div className="animate-fade-in">
                 <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-neutral-600 mb-8">All Audiobooks</h3>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-6 gap-y-10">
@@ -221,7 +217,7 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
                   ))}
                 </div>
               </div>
-            ) : null}
+            )}
 
             {activeTab === 'SERIES' && (
               <>
@@ -248,7 +244,7 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
             )}
 
             {!loading && filteredItems.length === 0 && searchTerm && <EmptyState message="No results found" />}
-            {!loading && activeTab === 'SERIES' && filteredSeries.length === 0 && !searchTerm && <EmptyState message="No series metadata found" />}
+            {!loading && activeTab === 'SERIES' && filteredSeries.length === 0 && !searchTerm && <EmptyState message="No collections found" />}
           </>
         )}
       </div>
@@ -301,7 +297,6 @@ const SeriesStackCard: React.FC<{ group: any, onClick: () => void }> = ({ group,
 );
 
 const BookCard: React.FC<{ item: ABSLibraryItem, onClick: () => void, coverUrl: string, showSequence?: boolean }> = ({ item, onClick, coverUrl, showSequence }) => {
-  // SYNC: Extract finished status from server progress
   const isFinished = (item as any).userProgress?.isFinished === true;
 
   return (
@@ -310,7 +305,6 @@ const BookCard: React.FC<{ item: ABSLibraryItem, onClick: () => void, coverUrl: 
         <img src={coverUrl} alt={item.media.metadata.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" loading="lazy" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-80" />
         
-        {/* FINISHED BADGE: Visual feedback for completed books */}
         {isFinished && (
           <div className="absolute top-3 right-3 bg-green-500 w-7 h-7 rounded-full flex items-center justify-center border-2 border-black/20 shadow-xl z-20">
             <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={4} d="M5 13l4 4L19 7"/></svg>
