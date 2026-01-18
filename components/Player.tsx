@@ -24,7 +24,6 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
   const [initialSeekDone, setInitialSeekDone] = useState(false);
   const [savedStartTime, setSavedStartTime] = useState(0);
 
-  // Aether Precision States
   const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
   const [sleepChapters, setSleepChapters] = useState(0); 
 
@@ -41,7 +40,6 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
   
   const coverUrl = useMemo(() => absService.getCoverUrl(item.id), [item.id, absService]);
 
-  // Chapter Logic
   const currentChapterIndex = useMemo(() => {
     if (!chapters.length) return -1;
     return chapters.findIndex((ch, i) => 
@@ -66,7 +64,6 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
 
   const totalSleepRemaining = sleepTargetTime ? sleepTargetTime - currentTime : 0;
 
-  // INITIAL LOAD LOGIC: Fetch progress and prepare resume position
   useEffect(() => {
     isMounted.current = true;
     const initData = async () => {
@@ -83,7 +80,6 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
             if (details.media.chapters) setChapters(details.media.chapters);
           }
 
-          // RESUME POSITION: Server check first, then secondary Local Storage backup
           let startAt = 0;
           if (progress && progress.currentTime > 0) {
             startAt = progress.currentTime;
@@ -96,7 +92,7 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
 
           if (startAt > 0) {
             setSavedStartTime(startAt);
-            setCurrentTime(startAt); // VISUAL STATE: Update UI immediately
+            setCurrentTime(startAt);
           }
         }
       } catch (e) {
@@ -114,7 +110,6 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
     if (audioRef.current && isMounted.current && audioRef.current.currentTime > 0) {
       const currentPos = audioRef.current.currentTime;
       absService.saveProgress(item.id, currentPos, duration);
-      // LOCAL STORAGE BACKUP
       localStorage.setItem(`rs_pos_${item.id}`, currentPos.toString());
     }
   }, [item.id, duration, absService]);
@@ -125,7 +120,7 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
     }
     return () => { 
       if (syncIntervalRef.current) clearInterval(syncIntervalRef.current); 
-      saveCurrentProgress(); // Final sync on unmount
+      saveCurrentProgress(); 
     };
   }, [isPlaying, saveCurrentProgress]);
 
@@ -140,7 +135,7 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
       } else {
         audioRef.current.pause();
         setIsPlaying(false);
-        saveCurrentProgress(); // Explicit save on pause
+        saveCurrentProgress();
       }
     } catch (e) {
       console.error("Playback Error:", e);
@@ -150,7 +145,6 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
     }
   }, [saveCurrentProgress]);
 
-  // AUTO-SEEK LOGIC: Ensure position is set before playback starts
   const performInitialSeek = useCallback(() => {
     if (audioRef.current && !initialSeekDone && savedStartTime > 0) {
       audioRef.current.currentTime = savedStartTime;
@@ -167,14 +161,14 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
 
   if (isLoading) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center bg-black">
+      <div className="h-[100dvh] flex flex-col items-center justify-center bg-black">
         <div className="w-10 h-10 border-2 border-purple-600/20 border-t-purple-600 rounded-full animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="flex-1 flex flex-col bg-black text-white h-full overflow-hidden safe-top safe-bottom">
+    <div className="h-[100dvh] w-full bg-black text-white overflow-hidden md:max-w-[450px] md:mx-auto md:border-x md:border-white/10 flex flex-col relative">
       <audio
         ref={audioRef}
         src={audioUrl || ''}
@@ -187,7 +181,8 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
         preload="auto"
       />
 
-      <header className="px-8 py-6 flex justify-between items-center z-10">
+      {/* FIXED HEADER */}
+      <header className="px-8 pt-10 pb-4 flex justify-between items-center z-10 shrink-0">
         <button onClick={onBack} className="text-[10px] font-black uppercase tracking-[0.2em] text-neutral-500 hover:text-white transition-colors">
           Library
         </button>
@@ -197,118 +192,134 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
         </button>
       </header>
 
-      <div className="flex-1 flex flex-col items-center px-8 overflow-y-auto no-scrollbar pb-10">
-        <div className="w-full aspect-square max-w-[300px] rounded-[48px] overflow-hidden mb-10 shadow-[0_40px_80px_-20px_rgba(157,80,187,0.4)] relative border border-white/5">
-          <img src={coverUrl} alt="Cover" className="w-full h-full object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
-          {!isPlaying && (
-            <button onClick={togglePlay} className="absolute inset-0 m-auto w-20 h-20 bg-black/40 backdrop-blur-md rounded-full flex items-center justify-center border border-white/10 active:scale-90 transition-all">
-              <svg className="w-8 h-8 text-white translate-x-1" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-            </button>
-          )}
-        </div>
-
-        <div className="text-center mb-6">
-          <h1 className="text-2xl font-black uppercase tracking-tight mb-2 px-4 leading-tight">{item.media.metadata.title}</h1>
-          <p className="text-neutral-500 text-[10px] font-black uppercase tracking-[0.3em] mb-4">{item.media.metadata.authorName}</p>
-          {currentChapter && (
-            <div className="inline-block bg-neutral-950 px-5 py-2 rounded-full border border-white/5 text-[9px] font-black uppercase tracking-widest text-purple-400">
-              {currentChapter.title || `Chapter ${currentChapterIndex + 1}`}
-            </div>
-          )}
-        </div>
-
-        <div className="text-center mb-8">
-          <p className="text-[10px] font-black uppercase tracking-[0.4em] text-neutral-600 mb-2">Time Remaining</p>
-          <div className="text-5xl font-black tabular-nums tracking-tighter text-purple-500 shadow-aether-glow">
-            {formatTime(chapterRemaining)}
-          </div>
-        </div>
-
-        <div className="w-full mb-12 px-2">
-          <div 
-            className="h-1.5 w-full bg-neutral-900 rounded-full cursor-pointer relative"
-            onClick={(e) => {
-              const rect = e.currentTarget.getBoundingClientRect();
-              const pos = (e.clientX - rect.left) / rect.width;
-              if (audioRef.current && currentChapter) {
-                audioRef.current.currentTime = currentChapter.start + (pos * chapterDuration);
-              }
-            }}
-          >
-            <div className="absolute h-full gradient-aether rounded-full" style={{ width: `${chapterProgress}%` }}>
-               <div className="absolute right-0 top-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full shadow-[0_0_15px_white] -mr-2" />
-            </div>
-          </div>
-          <div className="flex justify-between mt-4">
-            <span className="text-[10px] font-black text-neutral-600 tabular-nums">{formatTime(chapterElapsed)}</span>
-            <span className="text-[10px] font-black text-neutral-600 tabular-nums">{formatTime(chapterDuration)}</span>
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between w-full max-w-[340px] mb-12">
-          <button onClick={() => {
-            if (currentChapterIndex > 0 && audioRef.current) {
-              audioRef.current.currentTime = chapters[currentChapterIndex - 1].start;
-            }
-          }} className="p-2 text-neutral-600 hover:text-white transition-colors">
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7"/></svg>
-          </button>
-          
-          <button onClick={() => audioRef.current && (audioRef.current.currentTime -= 15)} className="p-2 text-neutral-500 hover:text-white active:scale-90 transition-all">
-            <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12.5 8c-2.65 0-5.05 1-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/></svg>
-          </button>
-
-          <button onClick={togglePlay} className="w-20 h-20 gradient-aether rounded-full flex items-center justify-center shadow-[0_0_40px_rgba(157,80,187,0.4)] active:scale-95 transition-all">
-            {isPlaying ? (
-              <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
-            ) : (
-              <svg className="w-8 h-8 text-white translate-x-1" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+      {/* RESPONSIVE FLEX CONTAINER */}
+      <div className="flex-1 flex flex-col items-center justify-between px-8 py-4 overflow-hidden">
+        
+        {/* DYNAMIC SCALING COVER ART: Shrinks first when screen is short */}
+        <div className="flex-1 min-h-0 w-full flex items-center justify-center mb-6">
+          <div className="relative group max-h-full">
+            <img 
+              src={coverUrl} 
+              alt="Cover" 
+              className="max-h-[40vh] aspect-square object-cover rounded-[48px] shadow-[0_40px_80px_-20px_rgba(157,80,187,0.4)] border border-white/5"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent rounded-[48px]" />
+            {!isPlaying && (
+              <button onClick={togglePlay} className="absolute inset-0 m-auto w-16 h-16 bg-black/40 backdrop-blur-md rounded-full flex items-center justify-center border border-white/10 active:scale-90 transition-all">
+                <svg className="w-6 h-6 text-white translate-x-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+              </button>
             )}
-          </button>
-
-          <button onClick={() => audioRef.current && (audioRef.current.currentTime += 30)} className="p-2 text-neutral-500 hover:text-white active:scale-90 transition-all">
-            <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.5 8c2.65 0 5.05 1 6.9 2.6L22 7v9h-9l3.62-3.62c-1.39-1.16-3.16-1.88-5.12-1.88-3.54 0-6.55 2.31-7.6 5.5l-2.37-.78C2.92 11.03 6.85 8 11.5 8z"/></svg>
-          </button>
-
-          <button onClick={() => {
-            if (currentChapterIndex >= 0 && currentChapterIndex < chapters.length - 1 && audioRef.current) {
-              audioRef.current.currentTime = chapters[currentChapterIndex + 1].start;
-            }
-          }} className="p-2 text-neutral-600 hover:text-white transition-colors">
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7"/></svg>
-          </button>
+          </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4 w-full">
-          <div className="bg-neutral-900/40 backdrop-blur-md border border-white/5 rounded-[32px] p-6 flex flex-col items-center">
-            <span className="text-[9px] font-black text-neutral-600 uppercase tracking-widest mb-4">Speed</span>
-            <div className="flex items-center gap-4">
-              <button onClick={() => setPlaybackSpeed(s => Math.max(0.5, Math.round((s - 0.1) * 10) / 10))} className="p-2 text-neutral-500">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M20 12H4"/></svg>
-              </button>
-              <span className="text-xl font-black text-purple-500 tabular-nums w-12 text-center">{playbackSpeed.toFixed(1)}x</span>
-              <button onClick={() => setPlaybackSpeed(s => Math.min(3.0, Math.round((s + 0.1) * 10) / 10))} className="p-2 text-neutral-500">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4"/></svg>
-              </button>
+        {/* METADATA & TIMER AREA */}
+        <div className="w-full space-y-4 shrink-0">
+          <div className="text-center">
+            <h1 className="text-xl md:text-2xl font-black uppercase tracking-tight mb-1 px-4 leading-tight truncate">{item.media.metadata.title}</h1>
+            <p className="text-neutral-500 text-[9px] font-black uppercase tracking-[0.3em] mb-3">{item.media.metadata.authorName}</p>
+            {currentChapter && (
+              <div className="inline-block bg-neutral-950 px-4 py-1.5 rounded-full border border-white/5 text-[8px] font-black uppercase tracking-widest text-purple-400">
+                {currentChapter.title || `Chapter ${currentChapterIndex + 1}`}
+              </div>
+            )}
+          </div>
+
+          <div className="text-center">
+            <p className="text-[9px] font-black uppercase tracking-[0.4em] text-neutral-600 mb-1">Time Remaining</p>
+            <div className="text-4xl md:text-5xl font-black tabular-nums tracking-tighter text-purple-500 shadow-aether-glow">
+              {formatTime(chapterRemaining)}
             </div>
           </div>
 
-          <div className="bg-neutral-900/40 backdrop-blur-md border border-white/5 rounded-[32px] p-6 flex flex-col items-center">
-            <span className="text-[9px] font-black text-neutral-600 uppercase tracking-widest mb-4">Sleep</span>
-            <div className="flex items-center gap-4">
-              <button onClick={() => setSleepChapters(c => Math.max(0, c - 1))} className="p-2 text-neutral-500">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M20 12H4"/></svg>
-              </button>
-              <span className="text-xl font-black text-purple-500 tabular-nums w-12 text-center">{sleepChapters}</span>
-              <button onClick={() => setSleepChapters(c => Math.min(20, c + 1))} className="p-2 text-neutral-500">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4"/></svg>
-              </button>
+          {/* PROGRESS BAR */}
+          <div className="w-full px-2">
+            <div 
+              className="h-1.5 w-full bg-neutral-900 rounded-full cursor-pointer relative"
+              onClick={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                const pos = (e.clientX - rect.left) / rect.width;
+                if (audioRef.current && currentChapter) {
+                  audioRef.current.currentTime = currentChapter.start + (pos * chapterDuration);
+                }
+              }}
+            >
+              <div className="absolute h-full gradient-aether rounded-full" style={{ width: `${chapterProgress}%` }}>
+                 <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3.5 h-3.5 bg-white rounded-full shadow-[0_0_15px_white] -mr-1.5" />
+              </div>
+            </div>
+            <div className="flex justify-between mt-3">
+              <span className="text-[9px] font-black text-neutral-600 tabular-nums">{formatTime(chapterElapsed)}</span>
+              <span className="text-[9px] font-black text-neutral-600 tabular-nums">{formatTime(chapterDuration)}</span>
+            </div>
+          </div>
+
+          {/* MAIN CONTROLS */}
+          <div className="flex items-center justify-between w-full max-w-[340px] mx-auto py-2">
+            <button onClick={() => {
+              if (currentChapterIndex > 0 && audioRef.current) {
+                audioRef.current.currentTime = chapters[currentChapterIndex - 1].start;
+              }
+            }} className="p-2 text-neutral-600 hover:text-white transition-colors">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7"/></svg>
+            </button>
+            
+            <button onClick={() => audioRef.current && (audioRef.current.currentTime -= 15)} className="p-2 text-neutral-500 hover:text-white transition-all">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12.5 8c-2.65 0-5.05 1-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/></svg>
+            </button>
+
+            <button onClick={togglePlay} className="w-16 h-16 gradient-aether rounded-full flex items-center justify-center shadow-[0_0_40px_rgba(157,80,187,0.3)] active:scale-95 transition-all">
+              {isPlaying ? (
+                <svg className="w-7 h-7 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+              ) : (
+                <svg className="w-7 h-7 text-white translate-x-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+              )}
+            </button>
+
+            <button onClick={() => audioRef.current && (audioRef.current.currentTime += 30)} className="p-2 text-neutral-500 hover:text-white transition-all">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.5 8c2.65 0 5.05 1 6.9 2.6L22 7v9h-9l3.62-3.62c-1.39-1.16-3.16-1.88-5.12-1.88-3.54 0-6.55 2.31-7.6 5.5l-2.37-.78C2.92 11.03 6.85 8 11.5 8z"/></svg>
+            </button>
+
+            <button onClick={() => {
+              if (currentChapterIndex >= 0 && currentChapterIndex < chapters.length - 1 && audioRef.current) {
+                audioRef.current.currentTime = chapters[currentChapterIndex + 1].start;
+              }
+            }} className="p-2 text-neutral-600 hover:text-white transition-colors">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7"/></svg>
+            </button>
+          </div>
+
+          {/* SECONDARY CONTROLS (SPEED / SLEEP) */}
+          <div className="grid grid-cols-2 gap-4 w-full pb-8">
+            <div className="bg-neutral-900/40 backdrop-blur-md border border-white/5 rounded-[28px] p-4 flex flex-col items-center">
+              <span className="text-[8px] font-black text-neutral-600 uppercase tracking-widest mb-2">Speed</span>
+              <div className="flex items-center gap-3">
+                <button onClick={() => setPlaybackSpeed(s => Math.max(0.5, Math.round((s - 0.1) * 10) / 10))} className="p-1 text-neutral-500 hover:text-white">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M20 12H4"/></svg>
+                </button>
+                <span className="text-base font-black text-purple-500 tabular-nums w-10 text-center">{playbackSpeed.toFixed(1)}x</span>
+                <button onClick={() => setPlaybackSpeed(s => Math.min(3.0, Math.round((s + 0.1) * 10) / 10))} className="p-1 text-neutral-500 hover:text-white">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4"/></svg>
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-neutral-900/40 backdrop-blur-md border border-white/5 rounded-[28px] p-4 flex flex-col items-center">
+              <span className="text-[8px] font-black text-neutral-600 uppercase tracking-widest mb-2">Sleep</span>
+              <div className="flex items-center gap-3">
+                <button onClick={() => setSleepChapters(c => Math.max(0, c - 1))} className="p-1 text-neutral-500 hover:text-white">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M20 12H4"/></svg>
+                </button>
+                <span className="text-base font-black text-purple-500 tabular-nums w-8 text-center">{sleepChapters}</span>
+                <button onClick={() => setSleepChapters(c => Math.min(20, c + 1))} className="p-1 text-neutral-500 hover:text-white">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4"/></svg>
+                </button>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
+      {/* CHAPTERS OVERLAY */}
       {showChapters && (
         <div className="fixed inset-0 bg-black/98 backdrop-blur-2xl z-50 p-8 flex flex-col animate-slide-up">
           <div className="flex justify-between items-center mb-10">
@@ -322,8 +333,8 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
                 onClick={() => { if(audioRef.current) audioRef.current.currentTime = ch.start; setShowChapters(false); }}
                 className={`w-full text-left p-6 rounded-[32px] border transition-all active:scale-[0.98] flex justify-between items-center ${
                   currentChapterIndex === i 
-                  ? 'bg-purple-600/10 border-purple-600/40 text-white' 
-                  : 'bg-neutral-950 border-white/5 text-neutral-500'
+                  ? 'bg-purple-600/10 border-purple-600/40 text-white shadow-[0_0_20px_rgba(157,80,187,0.1)]' 
+                  : 'bg-neutral-950 border-white/5 text-neutral-500 hover:border-white/10'
                 }`}
               >
                 <span className="text-sm font-bold truncate pr-4">{ch.title || `Chapter ${i + 1}`}</span>
