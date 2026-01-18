@@ -46,13 +46,10 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
     );
   }, [items, searchTerm]);
 
-  // THE GROUPING FUNCTION: Grouping by seriesName using reduce
+  // THE GROUPING LOGIC: Use reduce on libraryItems grouped by seriesName
   const seriesGroups = useMemo(() => {
     const grouped = items.reduce((acc: Record<string, ABSLibraryItem[]>, item) => {
-      // 1. Get Series Name
-      const sName = item.media.metadata.seriesName || (item as any).series?.[0]?.name;
-      
-      // 2. Filter: If a book has no series name, do not show it in this tab
+      const sName = item.media.metadata.seriesName;
       if (!sName) return acc;
 
       const key = sName.trim();
@@ -63,17 +60,17 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
       return acc;
     }, {});
 
-    // Process each group
+    // Transform map into array of folder objects
     return Object.entries(grouped).map(([name, groupItems]) => {
-      // Sort books internally by sequence number so Book 1 is easy to find
+      // SEQUENCE SORTING: Sort by parseInt of sequence
       const sorted = [...groupItems].sort((a, b) => {
-        const seqA = parseFloat(a.media.metadata.sequence || '0');
-        const seqB = parseFloat(b.media.metadata.sequence || '0');
+        const seqA = parseInt(a.media.metadata.sequence || '0', 10);
+        const seqB = parseInt(b.media.metadata.sequence || '0', 10);
         return seqA - seqB;
       });
 
-      // Find the cover for sequence 1 (or the first available after sorting)
-      const book1 = sorted.find(i => parseFloat(i.media.metadata.sequence || '0') === 1) || sorted[0];
+      // VISUAL: Use the cover of Book #1 (sequence 1) or the first in sorted list
+      const book1 = sorted.find(i => parseInt(i.media.metadata.sequence || '0', 10) === 1) || sorted[0];
 
       return {
         id: `series-${name}`,
@@ -170,7 +167,7 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
             {activeTab === 'SERIES' && (
               <>
                 {selectedSeries ? (
-                  // THE DRILL-DOWN: Click action showing sorted books inside series
+                  // SUB-GRID: Show books in specific series ordered by sequence
                   <div className="animate-fade-in">
                     <button onClick={() => setSelectedSeries(null)} className="flex items-center gap-2 text-aether-purple mb-6 text-[10px] font-black uppercase tracking-widest active:scale-95">
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M15 19l-7-7 7-7"/></svg>
@@ -187,7 +184,7 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
                     </div>
                   </div>
                 ) : (
-                  // THE SERIES GRID: Mapping over Object.values(seriesGroups)
+                  // SERIES GRID: Renders Series Folders
                   <SeriesGrid groups={filteredSeries} onSelect={setSelectedSeries} />
                 )}
               </>
@@ -202,9 +199,6 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
   );
 };
 
-/**
- * SeriesGrid Component
- */
 const SeriesGrid: React.FC<{ groups: any[], onSelect: (group: any) => void }> = ({ groups, onSelect }) => (
   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-6 gap-y-12">
     {groups.map(group => (
@@ -214,27 +208,27 @@ const SeriesGrid: React.FC<{ groups: any[], onSelect: (group: any) => void }> = 
 );
 
 /**
- * THE 'STACK' UI COMPONENT: Visual effect with absolute positioning layers
+ * THE 'STACK' UI COMPONENT: Visual effect with 4px/8px shifts
  */
 const SeriesStackCard: React.FC<{ group: any, onClick: () => void }> = ({ group, onClick }) => (
   <button onClick={onClick} className="flex flex-col text-left group transition-all active:scale-95 animate-fade-in relative">
     <div className="aspect-[2/3] w-full mb-4 relative">
       
-      {/* THE STACK EFFECT: Layered divs shifted 4px and 8px */}
+      {/* THE STACK EFFECT: Layered divs behind cover shifted 4px and 8px */}
       {group.bookCount > 1 && (
         <>
           <div 
-            className="absolute inset-0 bg-neutral-800/40 rounded-3xl border border-white/5" 
-            style={{ transform: 'translate(8px, -4px)' }} 
+            className="absolute inset-0 bg-neutral-800 rounded-3xl border border-white/5 opacity-40" 
+            style={{ transform: 'translate(8px, -8px)', zIndex: 1 }} 
           />
           <div 
-            className="absolute inset-0 bg-neutral-800/70 rounded-3xl border border-white/5" 
-            style={{ transform: 'translate(4px, -2px)' }} 
+            className="absolute inset-0 bg-neutral-800 rounded-3xl border border-white/5 opacity-70" 
+            style={{ transform: 'translate(4px, -4px)', zIndex: 2 }} 
           />
         </>
       )}
 
-      {/* Main Front Cover Container (Z-indexed) */}
+      {/* Main Front Cover Container */}
       <div className="absolute inset-0 bg-neutral-900 rounded-3xl overflow-hidden shadow-[0_20px_40px_rgba(0,0,0,0.6)] border border-white/5 group-hover:border-aether-purple/50 transition-all z-10">
         <img 
           src={group.coverUrl} 
@@ -247,13 +241,13 @@ const SeriesStackCard: React.FC<{ group: any, onClick: () => void }> = ({ group,
         </div>
       </div>
       
-      {/* THE BADGE: Gold badge in top right corner */}
-      <div className="absolute -top-1 -right-1 bg-[#b28a47] w-8 h-8 flex items-center justify-center rounded-full shadow-2xl z-20 border border-black/20 transform translate-x-1 -translate-y-1">
-        <p className="text-[13px] font-black text-black leading-none">{group.bookCount}</p>
+      {/* THE BADGE: Total books in series (Top-Right) */}
+      <div className="absolute -top-2 -right-2 bg-[#b28a47] w-9 h-9 flex items-center justify-center rounded-full shadow-2xl z-20 border border-black/30 transform translate-x-1 -translate-y-1">
+        <p className="text-[14px] font-black text-black leading-none">{group.bookCount}</p>
       </div>
     </div>
 
-    {/* THE LABEL: Only show Series Name below card */}
+    {/* LABEL: Only show Series Name */}
     <div className="px-1 text-center mt-2">
       <h3 className="text-[14px] font-bold line-clamp-1 group-hover:text-aether-purple transition-colors leading-tight text-white/90 uppercase tracking-tight">{group.name}</h3>
     </div>
