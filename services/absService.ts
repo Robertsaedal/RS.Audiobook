@@ -71,7 +71,7 @@ export class ABSService {
 
   async getLibraryItems(): Promise<ABSLibraryItem[]> {
     // Added /api back here
-    const data = await this.fetchApi('/api/items');
+    const data = await this.fetchApi('/items');
     return data.results || data;
   }
 
