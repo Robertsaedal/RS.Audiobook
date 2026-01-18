@@ -84,11 +84,31 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
             setDetailedItem(details);
             if (details.media.chapters) setChapters(details.media.chapters);
           }
-          if (progress?.currentTime) {
-            setSavedStartTime(progress.currentTime);
+
+          // RESUME LOGIC: Check server progress first, then fallback to localStorage
+          let startAt = 0;
+          if (progress?.currentTime > 0) {
+            startAt = progress.currentTime;
+          } else {
+            const localBackup = localStorage.getItem(`rs_pos_${item.id}`);
+            if (localBackup) {
+              startAt = parseFloat(localBackup);
+            }
+          }
+
+          if (startAt > 0) {
+            setSavedStartTime(startAt);
+            setCurrentTime(startAt); // Update UI immediately
           }
         }
       } catch (e) {
+        // RESUME LOGIC: Secondary safety check on fetch failure
+        const localBackup = localStorage.getItem(`rs_pos_${item.id}`);
+        if (localBackup && isMounted.current) {
+          const startAt = parseFloat(localBackup);
+          setSavedStartTime(startAt);
+          setCurrentTime(startAt);
+        }
         console.error("Init Error:", e);
       } finally {
         if (isMounted.current) setIsLoading(false);
@@ -128,12 +148,15 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
     }
   }, [currentTime, sleepTargetTime, isPlaying]);
 
-  // Periodic Progress Save
+  // Periodic Progress Save & Local Backup
   useEffect(() => {
     if (isPlaying) {
       syncIntervalRef.current = window.setInterval(() => {
         if (audioRef.current && isMounted.current) {
-          absService.saveProgress(item.id, audioRef.current.currentTime, duration);
+          const currentPos = audioRef.current.currentTime;
+          absService.saveProgress(item.id, currentPos, duration);
+          // LOCAL STORAGE BACKUP
+          localStorage.setItem(`rs_pos_${item.id}`, currentPos.toString());
         }
       }, 10000);
     }
@@ -168,6 +191,7 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
 
   const handleLoadedMetadata = () => {
     if (audioRef.current && !initialSeekDone && savedStartTime > 0) {
+      // AUTO-SEEK ON START: Set position before it can be heard playing
       audioRef.current.currentTime = savedStartTime;
       setCurrentTime(savedStartTime);
       setInitialSeekDone(true);
