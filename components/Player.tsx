@@ -76,7 +76,7 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
       try {
         const [details, progress] = await Promise.all([
           absService.getItemDetails(item.id),
-          absService.getProgress(item.id)
+          absService.getProgress(item.id).catch(() => null)
         ]);
         
         if (isMounted.current) {
@@ -87,7 +87,7 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
 
           // RESUME LOGIC: Check server progress first, then fallback to localStorage
           let startAt = 0;
-          if (progress?.currentTime > 0) {
+          if (progress && progress.currentTime > 0) {
             startAt = progress.currentTime;
           } else {
             const localBackup = localStorage.getItem(`rs_pos_${item.id}`);
@@ -98,11 +98,16 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
 
           if (startAt > 0) {
             setSavedStartTime(startAt);
-            setCurrentTime(startAt); // Update UI immediately
+            setCurrentTime(startAt); // Update UI timer immediately
+            // If audio element is already loaded, seek now
+            if (audioRef.current && audioRef.current.readyState >= 1) {
+              audioRef.current.currentTime = startAt;
+              setInitialSeekDone(true);
+            }
           }
         }
       } catch (e) {
-        // RESUME LOGIC: Secondary safety check on fetch failure
+        // FALLBACK: Local storage check if server fetch completely fails
         const localBackup = localStorage.getItem(`rs_pos_${item.id}`);
         if (localBackup && isMounted.current) {
           const startAt = parseFloat(localBackup);
@@ -148,20 +153,25 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
     }
   }, [currentTime, sleepTargetTime, isPlaying]);
 
+  const saveCurrentProgress = useCallback(() => {
+    if (audioRef.current && isMounted.current) {
+      const currentPos = audioRef.current.currentTime;
+      absService.saveProgress(item.id, currentPos, duration);
+      localStorage.setItem(`rs_pos_${item.id}`, currentPos.toString());
+    }
+  }, [item.id, duration, absService]);
+
   // Periodic Progress Save & Local Backup
   useEffect(() => {
     if (isPlaying) {
-      syncIntervalRef.current = window.setInterval(() => {
-        if (audioRef.current && isMounted.current) {
-          const currentPos = audioRef.current.currentTime;
-          absService.saveProgress(item.id, currentPos, duration);
-          // LOCAL STORAGE BACKUP
-          localStorage.setItem(`rs_pos_${item.id}`, currentPos.toString());
-        }
-      }, 10000);
+      syncIntervalRef.current = window.setInterval(saveCurrentProgress, 10000);
     }
-    return () => { if (syncIntervalRef.current) clearInterval(syncIntervalRef.current); };
-  }, [isPlaying, item.id, duration, absService]);
+    return () => { 
+      if (syncIntervalRef.current) clearInterval(syncIntervalRef.current); 
+      // FINAL SAVE ON UNMOUNT
+      saveCurrentProgress();
+    };
+  }, [isPlaying, saveCurrentProgress]);
 
   const togglePlay = useCallback(async () => {
     if (!audioRef.current) return;
@@ -174,6 +184,7 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
       } else {
         audioRef.current.pause();
         setIsPlaying(false);
+        saveCurrentProgress(); // Save immediately on pause
       }
     } catch (e) {
       console.error("Playback Error:", e);
@@ -181,7 +192,7 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
     } finally {
       playPromiseRef.current = null;
     }
-  }, []);
+  }, [saveCurrentProgress]);
 
   const formatTime = (s: number) => {
     if (isNaN(s) || s < 0) return "00:00";
@@ -191,7 +202,7 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
 
   const handleLoadedMetadata = () => {
     if (audioRef.current && !initialSeekDone && savedStartTime > 0) {
-      // AUTO-SEEK ON START: Set position before it can be heard playing
+      // AUTO-SEEK ON LOAD: Set position before user can hit play
       audioRef.current.currentTime = savedStartTime;
       setCurrentTime(savedStartTime);
       setInitialSeekDone(true);
