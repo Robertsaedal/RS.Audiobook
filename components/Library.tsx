@@ -51,39 +51,77 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
     );
   }, [items, searchTerm]);
 
-  // Unified Series Logic with Fallback Grouping
+  // Comprehensive Series Grouping Logic
   const processedSeries = useMemo(() => {
-    let result: any[] = [];
-    if (series.length > 0) {
-      result = series.map(s => {
-        // Try to find the first book in this series to get a cover
-        const firstItem = items.find(i => s.libraryItemIds.includes(i.id));
-        return {
-          ...s,
-          coverUrl: firstItem ? absService.getCoverUrl(firstItem.id) : ''
+    const groups: Record<string, any> = {};
+    
+    // Helper to add book to group
+    const addToGroup = (seriesName: string, itemId: string) => {
+      const name = seriesName || 'Standalone';
+      if (!groups[name]) {
+        groups[name] = {
+          id: `series-${name}`,
+          name: name,
+          libraryItemIds: [],
+          isStandalone: name === 'Standalone'
         };
+      }
+      if (!groups[name].libraryItemIds.includes(itemId)) {
+        groups[name].libraryItemIds.push(itemId);
+      }
+    };
+
+    // 1. Try to use API series data if available
+    if (series.length > 0) {
+      series.forEach(s => {
+        s.libraryItemIds.forEach(id => addToGroup(s.name, id));
       });
-    } else {
-      // Fallback: Group library items by seriesName
-      const groups: Record<string, any> = {};
-      items.forEach(item => {
-        const name = item.media.metadata.seriesName;
-        if (name) {
-          if (!groups[name]) {
-            groups[name] = {
-              id: `local-series-${name}`,
-              name: name,
-              libraryItemIds: [],
-              coverUrl: absService.getCoverUrl(item.id)
-            };
-          }
-          groups[name].libraryItemIds.push(item.id);
-        }
-      });
-      result = Object.values(groups);
     }
-    return result.sort((a, b) => a.name.localeCompare(b.name));
+
+    // 2. Scan library items for metadata series names (covers gaps in API)
+    items.forEach(item => {
+      if (item.media.metadata.seriesName) {
+        addToGroup(item.media.metadata.seriesName, item.id);
+      } else {
+        addToGroup('Standalone', item.id);
+      }
+    });
+
+    // Post-process groups: Sort books by sequence and get cover
+    return Object.values(groups).map(g => {
+      const gItems = items.filter(i => g.libraryItemIds.includes(i.id))
+        .sort((a, b) => {
+          const seqA = parseFloat(a.media.metadata.sequence || '0');
+          const seqB = parseFloat(b.media.metadata.sequence || '0');
+          return seqA - seqB;
+        });
+      
+      return {
+        ...g,
+        libraryItemIds: gItems.map(i => i.id),
+        coverUrl: gItems.length > 0 ? absService.getCoverUrl(gItems[0].id) : '',
+        bookCount: gItems.length
+      };
+    }).sort((a, b) => {
+      if (a.name === 'Standalone') return 1;
+      if (b.name === 'Standalone') return -1;
+      return a.name.localeCompare(b.name);
+    });
   }, [series, items, absService]);
+
+  // Filtered series for search
+  const filteredSeriesList = useMemo(() => {
+    const term = searchTerm.toLowerCase();
+    return processedSeries.filter(s => {
+      // Matches series name
+      if (s.name.toLowerCase().includes(term)) return true;
+      // OR matches any book inside the series
+      return s.libraryItemIds.some(id => {
+        const item = items.find(i => i.id === id);
+        return item?.media?.metadata?.title?.toLowerCase().includes(term);
+      });
+    });
+  }, [processedSeries, searchTerm, items]);
 
   const seriesItems = useMemo(() => {
     if (!selectedSeries) return [];
@@ -179,16 +217,19 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M15 19l-7-7 7-7"/></svg>
                       Back to Series
                     </button>
-                    <h3 className="text-xl font-black mb-8 border-l-4 border-aether-purple pl-4 uppercase tracking-tight">{selectedSeries.name}</h3>
+                    <div className="mb-10">
+                      <h3 className="text-2xl font-black uppercase tracking-tight text-white leading-tight mb-2">{selectedSeries.name}</h3>
+                      <p className="text-[10px] font-black text-neutral-600 uppercase tracking-[0.3em]">Collection of {selectedSeries.bookCount} Books</p>
+                    </div>
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-8">
                       {seriesItems.map(item => (
-                        <BookCard key={item.id} item={item} onClick={() => handleBookSelect(item)} coverUrl={absService.getCoverUrl(item.id)} />
+                        <BookCard key={item.id} item={item} onClick={() => handleBookSelect(item)} coverUrl={absService.getCoverUrl(item.id)} showSequence />
                       ))}
                     </div>
                   </div>
                 ) : (
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-8">
-                    {processedSeries.filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase())).map(s => (
+                    {filteredSeriesList.map(s => (
                       <SeriesCard key={s.id} series={s} onClick={() => setSelectedSeries(s)} />
                     ))}
                   </div>
@@ -204,14 +245,23 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
   );
 };
 
-const BookCard: React.FC<{ item: ABSLibraryItem, onClick: () => void, coverUrl: string, isHistory?: boolean }> = ({ item, onClick, coverUrl, isHistory }) => (
+const BookCard: React.FC<{ item: ABSLibraryItem, onClick: () => void, coverUrl: string, isHistory?: boolean, showSequence?: boolean }> = ({ item, onClick, coverUrl, isHistory, showSequence }) => (
   <button onClick={onClick} className="flex flex-col text-left group transition-all active:scale-95 animate-fade-in">
     <div className="aspect-[2/3] w-full bg-neutral-900 rounded-3xl overflow-hidden mb-4 relative shadow-2xl border border-white/5 group-hover:border-aether-purple/50 transition-all">
       <img src={coverUrl} alt={item.media.metadata.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" loading="lazy" />
       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-80" />
+      
+      {/* Sequence Badge */}
       {item.media.metadata.sequence && (
-        <div className="absolute top-3 left-3 bg-aether-purple px-2 py-0.5 rounded-lg border border-white/20 shadow-xl">
+        <div className="absolute top-3 left-3 bg-aether-purple px-2 py-0.5 rounded-lg border border-white/20 shadow-xl z-10">
           <span className="text-[9px] font-black text-white">#{item.media.metadata.sequence}</span>
+        </div>
+      )}
+
+      {/* Series View Specific Label */}
+      {showSequence && item.media.metadata.sequence && (
+        <div className="absolute bottom-3 left-3 right-3 bg-black/60 backdrop-blur-md px-2 py-1.5 rounded-xl border border-white/5">
+          <p className="text-[8px] font-black text-aether-purple uppercase tracking-[0.2em] text-center">Book {item.media.metadata.sequence}</p>
         </div>
       )}
     </div>
@@ -230,9 +280,15 @@ const SeriesCard: React.FC<{ series: any, onClick: () => void }> = ({ series, on
           <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
         </div>
       )}
-      <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent flex flex-col justify-end p-4">
-        <h3 className="text-[11px] font-black line-clamp-2 uppercase tracking-tight text-white leading-tight mb-1">{series.name}</h3>
-        <p className="text-[8px] font-black uppercase tracking-widest text-aether-purple drop-shadow-sm">{series.libraryItemIds.length} Books</p>
+      
+      {/* Book Count Badge */}
+      <div className="absolute top-3 right-3 bg-white/10 backdrop-blur-md px-2 py-1 rounded-xl border border-white/10 shadow-lg">
+        <p className="text-[8px] font-black text-white uppercase tracking-widest">{series.bookCount} {series.bookCount === 1 ? 'Book' : 'Books'}</p>
+      </div>
+
+      <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent flex flex-col justify-end p-5">
+        <h3 className="text-[12px] font-black line-clamp-2 uppercase tracking-tight text-white leading-tight mb-1">{series.name}</h3>
+        <p className="text-[8px] font-black uppercase tracking-[0.2em] text-aether-purple drop-shadow-sm">{series.isStandalone ? 'Miscellaneous' : 'Collection'}</p>
       </div>
     </div>
   </button>
