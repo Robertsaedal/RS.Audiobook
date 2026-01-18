@@ -3,6 +3,8 @@ import { ABSUser, ABSLibraryItem, ABSSeries, ABSProgress } from '../types';
 export class ABSService {
   private serverUrl: string;
   private token: string;
+  // Your verified Library ID
+  private libraryId = 'a5706742-ccbf-452a-8b7d-822988dd5f63';
 
   constructor(serverUrl: string, token: string) {
     let cleanUrl = serverUrl.trim().replace(/\/+$/, '');
@@ -13,9 +15,6 @@ export class ABSService {
     this.token = token;
   }
 
-  /**
-   * Static login method - WORKING WITHOUT /API
-   */
   static async login(serverUrl: string, username: string, password: string): Promise<any> {
     const envUrl = (import.meta as any).env?.VITE_ABS_URL;
     let baseUrl = (serverUrl || envUrl || 'rs-audio-server.duckdns.org').trim().replace(/\/+$/, '');
@@ -29,9 +28,7 @@ export class ABSService {
       method: 'POST',
       mode: 'cors',
       credentials: 'include',
-      headers: {
-        'Content-Type': 'application/json'
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
         username: username.trim(), 
         password: password 
@@ -70,28 +67,22 @@ export class ABSService {
   }
 
   async getLibraryItems(): Promise<ABSLibraryItem[]> {
-    // We target your specific Library ID here
-    const libraryId = 'a5706742-ccbf-452a-8b7d-822988dd5f63';
-    const data = await this.fetchApi(`/api/libraries/${libraryId}/items`);
+    const data = await this.fetchApi(`/api/libraries/${this.libraryId}/items`);
     return data.results || data;
   }
 
   async getItemDetails(id: string): Promise<ABSLibraryItem> {
-    // Added /api back here
     return this.fetchApi(`/api/items/${id}`);
   }
 
   async getSeries(): Promise<ABSSeries[]> {
-    const libraryId = 'a5706742-ccbf-452a-8b7d-822988dd5f63';
-    // Ensure the path includes the library ID
-    const data = await this.fetchApi(`/api/libraries/${libraryId}/series`);
+    const data = await this.fetchApi(`/api/libraries/${this.libraryId}/series`);
     return data.results || data;
-}
+  }
 
   async getProgress(itemId: string): Promise<ABSProgress | null> {
     try {
-      // Added /api back here
-      return await this.fetchApi(`/api/users/me/progress/${itemId}`);
+      return await this.fetchApi(`/api/me/progress/${itemId}`);
     } catch (e) {
       return null;
     }
@@ -99,38 +90,26 @@ export class ABSService {
 
   async saveProgress(itemId: string, currentTime: number, duration: number): Promise<void> {
     try {
-        const response = await fetch(`${this.serverUrl}/api/users/me/progress/${itemId}`, {
-            method: 'PATCH',
-            mode: 'cors',
-            credentials: 'include',
-            headers: {
-                'Authorization': `Bearer ${this.token}`,
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                currentTime,
-                duration,
-                progress: duration > 0 ? currentTime / duration : 0,
-                isFinished: currentTime >= duration - 10 && duration > 0,
-            }),
-        });
+      const response = await fetch(`${this.serverUrl}/api/me/progress/${itemId}`, {
+        method: 'PATCH',
+        mode: 'cors',
+        credentials: 'include',
+        headers: {
+          'Authorization': `Bearer ${this.token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          currentTime,
+          duration,
+          progress: duration > 0 ? currentTime / duration : 0,
+          isFinished: currentTime >= duration - 10 && duration > 0,
+        }),
+      });
 
-        // Don't use .json() here because the server just sends "OK"
-        if (!response.ok) {
-            throw new Error(`Save failed: ${response.status}`);
-        }
+      if (!response.ok) {
+        throw new Error(`Save failed: ${response.status}`);
+      }
+      // Note: We do NOT call .json() here because ABS returns "OK" string
     } catch (e) {
-        console.error("Failed to sync progress to server", e);
+      console.error("Failed to sync progress to server", e);
     }
-}
-
-  getAudioUrl(itemId: string, audioFileId: string): string {
-    // Added /api back here
-    return `${this.serverUrl}/api/items/${itemId}/audio/${audioFileId}?token=${this.token}`;
-  }
-
-  getCoverUrl(itemId: string): string {
-    // Added /api back here
-    return `${this.serverUrl}/api/items/${itemId}/cover?token=${this.token}`;
-  }
-}
