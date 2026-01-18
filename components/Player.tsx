@@ -96,14 +96,14 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
   return (
     <div className="flex-1 flex flex-col bg-black text-white h-full overflow-hidden relative">
       <audio
-        key={audioUrl}
-        ref={audioRef}
-        src={audioUrl}
-        playsInline
-        onTimeUpdate={() => audioRef.current && setCurrentTime(audioRef.current.currentTime)}
-        onEnded={() => setIsPlaying(false)}
-        className="hidden"
-      />
+  key={audioUrl}
+  ref={audioRef}
+  src={audioUrl}
+  controls  /* Change 'hidden' to 'controls' temporarily */
+  className="block w-full mt-4" 
+  onPlay={() => setIsPlaying(true)}
+  onPause={() => setIsPlaying(false)}
+/>
 
       <header className="px-6 py-4 flex justify-between items-center">
         <button onClick={onBack} className="text-neutral-400 p-2">BACK</button>
