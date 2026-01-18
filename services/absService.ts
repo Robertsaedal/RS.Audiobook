@@ -17,8 +17,8 @@ export class ABSService {
   }
 
   /**
-   * Static login method configured to bypass preflight blocks and handle CORS securely.
-   * Uses VITE_ABS_URL if available, otherwise falls back to the provided or default URL.
+   * Static login method configured for secure cross-domain authentication.
+   * Endpoint: https://rs-audio-server.duckdns.org/api/login
    */
   static async login(serverUrl: string, username: string, password: string): Promise<any> {
     const envUrl = (import.meta as any).env?.VITE_ABS_URL;
@@ -26,7 +26,7 @@ export class ABSService {
     // Clean and build the base URL
     let baseUrl = (serverUrl || envUrl || 'rs-audio-server.duckdns.org').trim().replace(/\/+$/, '');
     
-    // Ensure protocol
+    // Ensure protocol is https for duckdns security
     if (!baseUrl.startsWith('http')) {
       baseUrl = `https://${baseUrl}`;
     }
@@ -35,10 +35,10 @@ export class ABSService {
 
     const response = await fetch(endpoint, {
       method: 'POST',
-      mode: 'cors',           // Use CORS mode to handle cross-origin requests
-      credentials: 'include', // Include credentials for secure session handling
+      mode: 'cors',           // Explicitly allow CORS
+      credentials: 'include', // Ensure cookies/sessions are sent correctly
       headers: {
-        'Content-Type': 'application/json' // Minimal standard header to avoid preflight issues
+        'Content-Type': 'application/json' // Keep headers simple to avoid preflight issues
       },
       body: JSON.stringify({ 
         username: username.trim(), 
@@ -60,8 +60,8 @@ export class ABSService {
 
     const response = await fetch(url, {
       ...options,
-      mode: 'cors',           // Consistent CORS mode for authenticated requests
-      credentials: 'include', // Consistent credentials handling
+      mode: 'cors',
+      credentials: 'include',
       headers: {
         'Authorization': `Bearer ${this.token}`,
         'Content-Type': 'application/json',
