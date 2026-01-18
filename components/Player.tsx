@@ -86,8 +86,11 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
 
   const togglePlay = async () => {
     if (!audioRef.current) return;
-    setIsPopping(true);
-    setTimeout(() => setIsPopping(false), 200);
+    
+    // If the audio hasn't loaded a source yet, force it
+    if (audioRef.current.readyState === 0) {
+      audioRef.current.load();
+    }
 
     try {
       if (isPlaying) {
@@ -97,11 +100,13 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
         const playPromise = audioRef.current.play();
         if (playPromise !== undefined) {
           await playPromise;
-          if (isMounted.current) setIsPlaying(true);
+          setIsPlaying(true);
         }
       }
     } catch (error) {
       console.error("Playback failed:", error);
+      // This is where the browser usually blocks the request
+      alert("Browser blocked playback. Please click the Lock icon in the URL bar and 'Allow Insecure Content'.");
       setIsPlaying(false);
     }
   };
