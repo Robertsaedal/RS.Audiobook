@@ -82,16 +82,16 @@ export class ABSService {
   }
 
   async getSeries(): Promise<ABSSeries[]> {
-    // We target your specific Library ID here
     const libraryId = 'a5706742-ccbf-452a-8b7d-822988dd5f63';
+    // Ensure the path includes the library ID
     const data = await this.fetchApi(`/api/libraries/${libraryId}/series`);
     return data.results || data;
-  }
+}
 
   async getProgress(itemId: string): Promise<ABSProgress | null> {
     try {
       // Added /api back here
-      return await this.fetchApi(`/api/me/progress/${itemId}`);
+      return await this.fetchApi(`/api/users/me/progress/${itemId}`);
     } catch (e) {
       return null;
     }
@@ -99,20 +99,30 @@ export class ABSService {
 
   async saveProgress(itemId: string, currentTime: number, duration: number): Promise<void> {
     try {
-      // Added /api back here
-      await this.fetchApi(`/api/me/progress/${itemId}`, {
-        method: 'PATCH',
-        body: JSON.stringify({
-          currentTime,
-          duration,
-          progress: duration > 0 ? currentTime / duration : 0,
-          isFinished: currentTime >= duration - 10 && duration > 0,
-        }),
-      });
+        const response = await fetch(`${this.serverUrl}/api/users/me/progress/${itemId}`, {
+            method: 'PATCH',
+            mode: 'cors',
+            credentials: 'include',
+            headers: {
+                'Authorization': `Bearer ${this.token}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                currentTime,
+                duration,
+                progress: duration > 0 ? currentTime / duration : 0,
+                isFinished: currentTime >= duration - 10 && duration > 0,
+            }),
+        });
+
+        // Don't use .json() here because the server just sends "OK"
+        if (!response.ok) {
+            throw new Error(`Save failed: ${response.status}`);
+        }
     } catch (e) {
-      console.error("Failed to sync progress to server", e);
+        console.error("Failed to sync progress to server", e);
     }
-  }
+}
 
   getAudioUrl(itemId: string, audioFileId: string): string {
     // Added /api back here
