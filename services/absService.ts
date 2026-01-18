@@ -7,7 +7,7 @@ export class ABSService {
   private libraryId: string | null = null;
 
   constructor(serverUrl: string, token: string) {
-    let cleanUrl = serverUrl.trim().replace(/\/+$/, '');
+    let cleanUrl = serverUrl.trim().replace(/\/+$/, '').replace(/\/api$/, '');
     if (cleanUrl && !cleanUrl.startsWith('http')) {
       cleanUrl = `https://${cleanUrl}`;
     }
@@ -21,9 +21,11 @@ export class ABSService {
       baseUrl = `https://${baseUrl}`;
     }
 
+    // Explicitly set credentials to 'omit' to prevent CORS header conflicts
     const response = await fetch(`${baseUrl}/login`, {
       method: 'POST',
       mode: 'cors',
+      credentials: 'omit',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
         username: username.trim(), 
@@ -46,6 +48,7 @@ export class ABSService {
     const response = await fetch(url, {
       ...options,
       mode: 'cors',
+      credentials: 'omit', // Stay consistent to avoid CORS issues
       headers: {
         'Authorization': `Bearer ${this.token}`,
         'Content-Type': 'application/json',
@@ -108,6 +111,7 @@ export class ABSService {
     fetch(url, {
       method: 'PATCH',
       mode: 'cors',
+      credentials: 'omit',
       headers: {
         'Authorization': `Bearer ${this.token}`,
         'Content-Type': 'application/json',
