@@ -66,7 +66,8 @@ export class ABSService {
   }
 
   async getLibraryItems(): Promise<ABSLibraryItem[]> {
-    const data = await this.fetchApi(`/api/libraries/${this.libraryId}/items`);
+    // Adding include=progress to get progress in the initial list call
+    const data = await this.fetchApi(`/api/libraries/${this.libraryId}/items?include=progress`);
     return data.results || data;
   }
 
@@ -75,8 +76,10 @@ export class ABSService {
   }
 
   async getSeries(): Promise<ABSSeries[]> {
+    // Most ABS versions use this path for library-specific series
     const data = await this.fetchApi(`/api/libraries/${this.libraryId}/series`);
-    return data.results || data;
+    // Ensure we return an array even if the response is nested
+    return data.results || (Array.isArray(data) ? data : []);
   }
 
   async getProgress(itemId: string): Promise<ABSProgress | null> {
