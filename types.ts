@@ -22,7 +22,7 @@ export interface ABSAudioFile {
 
 export interface ABSLibraryItem {
   id: string;
-  addedDate: number;
+  addedDate: number | string;
   mediaType: string;
   media: {
     metadata: {
@@ -37,6 +37,7 @@ export interface ABSLibraryItem {
     audioFiles: ABSAudioFile[];
     coverPath?: string;
   };
+  userProgress?: ABSProgress;
 }
 
 export interface ABSSeries {
