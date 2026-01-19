@@ -1,8 +1,9 @@
+
 import React, { useEffect, useState, useMemo } from 'react';
 import { AuthState, ABSLibraryItem, ABSProgress } from '../types';
 import { ABSService } from '../services/absService';
 import Navigation, { NavTab } from './Navigation';
-import { Search, ChevronRight, Clock, ArrowRight, Play } from 'lucide-react';
+import { Search, ChevronRight, Clock, ArrowRight, Play, ArrowUpDown, Check } from 'lucide-react';
 
 interface LibraryProps {
   auth: AuthState;
@@ -17,11 +18,15 @@ interface SeriesStack {
   totalCount: number;
 }
 
+type SortMethod = 'NEWEST' | 'OLDEST' | 'TITLE' | 'AUTHOR';
+
 const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
   const [items, setItems] = useState<ABSLibraryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<NavTab>('HOME');
   const [searchTerm, setSearchTerm] = useState('');
+  const [sortMethod, setSortMethod] = useState<SortMethod>('NEWEST');
+  const [showSortMenu, setShowSortMenu] = useState(false);
   const [selectedSeries, setSelectedSeries] = useState<SeriesStack | null>(null);
   const [viewingAll, setViewingAll] = useState(false);
   
@@ -49,11 +54,20 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
 
   const sortedAllItems = useMemo(() => {
     return [...items].sort((a, b) => {
-      const dateA = absService.normalizeDate(a.addedDate);
-      const dateB = absService.normalizeDate(b.addedDate);
-      return dateB - dateA;
+      switch (sortMethod) {
+        case 'NEWEST':
+          return absService.normalizeDate(b.addedDate) - absService.normalizeDate(a.addedDate);
+        case 'OLDEST':
+          return absService.normalizeDate(a.addedDate) - absService.normalizeDate(b.addedDate);
+        case 'TITLE':
+          return a.media.metadata.title.localeCompare(b.media.metadata.title);
+        case 'AUTHOR':
+          return a.media.metadata.authorName.localeCompare(b.media.metadata.authorName);
+        default:
+          return 0;
+      }
     });
-  }, [items, absService]);
+  }, [items, absService, sortMethod]);
 
   const resumeHero = useMemo(() => {
     return items
@@ -61,7 +75,12 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
       .sort((a, b) => (b.userProgress?.lastUpdate || 0) - (a.userProgress?.lastUpdate || 0))[0];
   }, [items]);
 
-  const recentlyAdded = useMemo(() => sortedAllItems.slice(0, 10), [sortedAllItems]);
+  const recentlyAdded = useMemo(() => {
+    // Recently added is always newest first regardless of global sort
+    return [...items]
+      .sort((a, b) => absService.normalizeDate(b.addedDate) - absService.normalizeDate(a.addedDate))
+      .slice(0, 10);
+  }, [items, absService]);
 
   const seriesStacks = useMemo(() => {
     const groups: Record<string, ABSLibraryItem[]> = {};
@@ -99,6 +118,13 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
     return seriesStacks.find(s => s.name === seriesName)?.totalCount || 0;
   };
 
+  const sortOptions: { value: SortMethod, label: string }[] = [
+    { value: 'NEWEST', label: 'Recently Added' },
+    { value: 'OLDEST', label: 'Oldest' },
+    { value: 'TITLE', label: 'By Title' },
+    { value: 'AUTHOR', label: 'By Author' },
+  ];
+
   if (loading) return (
     <div className="flex-1 flex flex-col items-center justify-center bg-black h-[100dvh]">
       <div className="w-12 h-12 border-4 border-purple-600/20 border-t-purple-600 rounded-full animate-spin mb-6" />
@@ -123,15 +149,44 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
             </div>
           </div>
 
-          <div className="relative group max-w-2xl">
-            <input
-              type="text"
-              placeholder="Query library archive..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-neutral-900/50 border border-white/5 rounded-[24px] py-4 pl-14 pr-6 text-sm text-white placeholder-neutral-800 transition-all focus:ring-1 focus:ring-purple-600/40 outline-none backdrop-blur-sm"
-            />
-            <Search className="w-5 h-5 text-neutral-800 absolute left-5 top-1/2 -translate-y-1/2 group-focus-within:text-purple-500 transition-colors" />
+          <div className="flex items-center gap-4 max-w-2xl relative">
+            <div className="relative group flex-1">
+              <input
+                type="text"
+                placeholder="Query library archive..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full bg-neutral-900/50 border border-white/5 rounded-[24px] py-4 pl-14 pr-6 text-sm text-white placeholder-neutral-800 transition-all focus:ring-1 focus:ring-purple-600/40 outline-none backdrop-blur-sm"
+              />
+              <Search className="w-5 h-5 text-neutral-800 absolute left-5 top-1/2 -translate-y-1/2 group-focus-within:text-purple-500 transition-colors" />
+            </div>
+            
+            <div className="relative">
+              <button 
+                onClick={() => setShowSortMenu(!showSortMenu)}
+                className={`p-4 rounded-[24px] border border-white/5 bg-neutral-900/50 backdrop-blur-sm transition-all active:scale-90 ${showSortMenu ? 'text-purple-500 border-purple-600/40' : 'text-neutral-500'}`}
+              >
+                <ArrowUpDown size={20} />
+              </button>
+              
+              {showSortMenu && (
+                <>
+                  <div className="fixed inset-0 z-[60]" onClick={() => setShowSortMenu(false)} />
+                  <div className="absolute right-0 top-full mt-2 w-56 bg-neutral-950 border border-white/10 rounded-[28px] p-2 shadow-2xl z-[70] animate-fade-in backdrop-blur-xl">
+                    {sortOptions.map((opt) => (
+                      <button
+                        key={opt.value}
+                        onClick={() => { setSortMethod(opt.value); setShowSortMenu(false); }}
+                        className={`w-full flex items-center justify-between px-6 py-4 rounded-[20px] transition-all ${sortMethod === opt.value ? 'bg-purple-600/10 text-white' : 'text-neutral-500 hover:text-neutral-300'}`}
+                      >
+                        <span className="text-[11px] font-black uppercase tracking-widest">{opt.label}</span>
+                        {sortMethod === opt.value && <Check size={14} className="text-purple-500" />}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
 
@@ -164,9 +219,15 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
                 <ChevronRight className="rotate-180" size={14} />
                 Back to Dashboard
               </button>
-              <div className="space-y-2">
-                <h3 className="text-3xl font-black uppercase tracking-tighter text-white">Full Library</h3>
-                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-neutral-700">{items.length} TITLES ACCESSIBLE</p>
+              <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+                <div className="space-y-2">
+                  <h3 className="text-3xl font-black uppercase tracking-tighter text-white">Full Library</h3>
+                  <p className="text-[10px] font-black uppercase tracking-[0.3em] text-neutral-700">{items.length} TITLES ACCESSIBLE</p>
+                </div>
+                <div className="flex items-center gap-2 px-4 py-2 bg-neutral-900/40 border border-white/5 rounded-full">
+                   <span className="text-[8px] font-black text-neutral-500 uppercase tracking-widest">Order:</span>
+                   <span className="text-[8px] font-black text-purple-500 uppercase tracking-widest">{sortOptions.find(o => o.value === sortMethod)?.label}</span>
+                </div>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-x-6 gap-y-12">
                 {filteredItems.map(item => (
@@ -194,7 +255,7 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
                       className="relative group w-full md:max-w-4xl aspect-[21/9] bg-neutral-950 rounded-[40px] overflow-hidden border border-white/5 cursor-pointer shadow-2xl active:scale-[0.98] transition-all"
                     >
                       <img src={absService.getCoverUrl(resumeHero.id)} className="w-full h-full object-cover opacity-50 transition-opacity" alt="" />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent p-8 md:p-12 flex flex-col justify-end">
+                      <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent p-8 md:p-12 flex flex-col justify-end">
                         <h4 className="text-3xl md:text-5xl font-black uppercase tracking-tighter text-white mb-1 truncate leading-none">{resumeHero.media.metadata.title}</h4>
                         <p className="text-[10px] md:text-xs font-black text-purple-500 uppercase tracking-[0.2em] mb-6">
                           {resumeHero.media.metadata.seriesName ? `${resumeHero.media.metadata.seriesName}: Book ${resumeHero.media.metadata.sequence}` : resumeHero.media.metadata.authorName}

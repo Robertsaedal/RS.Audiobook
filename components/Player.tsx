@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { AuthState, ABSLibraryItem, ABSChapter } from '../types';
 import { ABSService } from '../services/absService';
 import Hls from 'hls.js';
-import { ChevronDown, Play, Pause, SkipBack, SkipForward, Timer, Info, X, Activity, Plus, Minus } from 'lucide-react';
+import { ChevronDown, Play, Pause, SkipBack, SkipForward, Timer, Info, X, Activity, Plus, Minus, AlertCircle } from 'lucide-react';
 
 interface PlayerProps {
   auth: AuthState;
@@ -22,10 +22,9 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
   const [showChapters, setShowChapters] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
   
-  // Chapter-based Sleep Timer state
-  // sleepChapters: 0 = off, 1 = end of current chapter, 2 = end of next chapter, etc.
   const [sleepChapters, setSleepChapters] = useState<number>(0);
 
   const absService = useMemo(() => new ABSService(auth.serverUrl, auth.user?.token || ''), [auth]);
@@ -43,7 +42,6 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
   const chapterRemaining = currentChapter ? Math.max(0, currentChapter.end - currentTime) : 0;
   const chapterProgress = currentChapter ? ((currentTime - currentChapter.start) / (currentChapter.end - currentChapter.start)) * 100 : 0;
 
-  // Calculate total time until sleep (if chapter-based timer is active)
   const timeUntilSleep = useMemo(() => {
     if (sleepChapters <= 0 || !chapters.length || currentChapterIndex === -1) return null;
     const targetChapterIdx = Math.min(chapters.length - 1, currentChapterIndex + (sleepChapters - 1));
@@ -51,7 +49,6 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
     return Math.max(0, targetEndTime - currentTime);
   }, [sleepChapters, chapters, currentChapterIndex, currentTime]);
 
-  // Handle sleep timer auto-pause
   useEffect(() => {
     if (sleepChapters > 0 && timeUntilSleep !== null && timeUntilSleep <= 0.5) {
       if (audioRef.current && !audioRef.current.paused) {
@@ -63,7 +60,7 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
   }, [timeUntilSleep, sleepChapters]);
 
   const togglePlay = useCallback(async () => {
-    if (!audioRef.current) return;
+    if (!audioRef.current || isLoading || error) return;
     try {
       if (audioRef.current.paused) {
         await audioRef.current.play();
@@ -75,7 +72,7 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
     } catch (err) {
       console.error("Playback toggle failed", err);
     }
-  }, []);
+  }, [isLoading, error]);
 
   const skipChapter = useCallback((direction: number) => {
     if (!chapters.length || !audioRef.current) return;
@@ -105,74 +102,92 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
   useEffect(() => {
     isMounted.current = true;
     const init = async () => {
+      setError(null);
+      setIsLoading(true);
       try {
         const [details, playbackSession] = await Promise.all([
           absService.getItemDetails(item.id),
           absService.startPlaybackSession(item.id)
         ]);
 
-        if (isMounted.current && details && playbackSession) {
-          setChapters(details.media.chapters || []);
-          const progress = details.userProgress || await absService.getProgress(item.id);
-          const startAt = progress?.currentTime || 0;
+        if (!isMounted.current) return;
 
-          if (audioRef.current) {
-            const hlsUrl = `${auth.serverUrl}/api/items/${item.id}/play/${playbackSession.id}/hls/m3u8?token=${auth.user?.token}`;
+        if (!details || !playbackSession) {
+          throw new Error("Failed to initialize playback session. Check server connection.");
+        }
+
+        setChapters(details.media.chapters || []);
+        const progress = details.userProgress || await absService.getProgress(item.id);
+        const startAt = progress?.currentTime || 0;
+
+        if (audioRef.current) {
+          const hlsUrl = `${auth.serverUrl}/api/items/${item.id}/play/${playbackSession.id}/hls/m3u8?token=${auth.user?.token}`;
+          
+          if (Hls.isSupported()) {
+            if (hlsRef.current) hlsRef.current.destroy();
+            hlsRef.current = new Hls({ 
+              enableWorker: true,
+              maxBufferLength: 20,
+              maxMaxBufferLength: 40,
+              startPosition: startAt,
+              autoStartLoad: true,
+              lowLatencyMode: true,
+              backBufferLength: 60
+            });
             
-            if (Hls.isSupported()) {
-              if (hlsRef.current) hlsRef.current.destroy();
-              hlsRef.current = new Hls({ 
-                enableWorker: true,
-                maxBufferLength: 30,
-                maxMaxBufferLength: 60,
-                startPosition: startAt,
-                autoStartLoad: true,
-                lowLatencyMode: true
-              });
-              
-              hlsRef.current.attachMedia(audioRef.current);
-              hlsRef.current.on(Hls.Events.MEDIA_ATTACHED, () => {
-                hlsRef.current?.loadSource(hlsUrl);
-              });
-              
-              hlsRef.current.on(Hls.Events.MANIFEST_PARSED, () => {
-                if (isMounted.current && audioRef.current) {
-                  audioRef.current.currentTime = startAt;
-                  setCurrentTime(startAt);
-                  setIsLoading(false);
-                }
-              });
+            hlsRef.current.attachMedia(audioRef.current);
+            hlsRef.current.on(Hls.Events.MEDIA_ATTACHED, () => {
+              hlsRef.current?.loadSource(hlsUrl);
+            });
+            
+            hlsRef.current.on(Hls.Events.MANIFEST_PARSED, () => {
+              if (isMounted.current) {
+                setIsLoading(false);
+              }
+            });
 
-              hlsRef.current.on(Hls.Events.ERROR, (_, data) => {
-                if (data.fatal) {
-                  console.error("Fatal HLS Error:", data.type);
+            hlsRef.current.on(Hls.Events.ERROR, (_, data) => {
+              if (data.fatal) {
+                console.error("Fatal HLS Error:", data.type);
+                if (isMounted.current) {
+                  setError("Stream encounterd a fatal error. Reconnecting...");
                   hlsRef.current?.destroy();
                 }
-              });
-            } else if (audioRef.current.canPlayType('application/vnd.apple.mpegurl')) {
-              audioRef.current.src = hlsUrl;
-              audioRef.current.addEventListener('loadedmetadata', () => {
-                if (audioRef.current) {
-                  audioRef.current.currentTime = startAt;
-                  setCurrentTime(startAt);
-                  setIsLoading(false);
-                }
-              }, { once: true });
-            }
-
-            setupMediaSession();
+              }
+            });
+          } else if (audioRef.current.canPlayType('application/vnd.apple.mpegurl')) {
+            // Native HLS (iOS/Safari)
+            audioRef.current.src = hlsUrl;
+            audioRef.current.addEventListener('loadedmetadata', () => {
+              if (audioRef.current && isMounted.current) {
+                audioRef.current.currentTime = startAt;
+                setCurrentTime(startAt);
+                setIsLoading(false);
+              }
+            }, { once: true });
+            
+            audioRef.current.addEventListener('error', () => {
+              if (isMounted.current) setError("Native audio link failed.");
+            }, { once: true });
+          } else {
+            throw new Error("HLS playback is not supported in this browser.");
           }
+
+          setupMediaSession();
         }
-      } catch (e) { 
+      } catch (e: any) { 
         console.error("Player initialization error", e);
-        setIsLoading(false);
+        if (isMounted.current) {
+          setError(e.message || "Archive link failed.");
+          setIsLoading(false);
+        }
       }
     };
 
     init();
     return () => { 
       isMounted.current = false;
-      hlsRef.current?.destroy();
+      if (hlsRef.current) hlsRef.current.destroy();
     };
   }, [item.id, absService, auth]);
 
@@ -198,9 +213,27 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
   };
 
   if (isLoading) return (
-    <div className="h-[100dvh] flex flex-col items-center justify-center bg-black gap-4">
+    <div className="h-[100dvh] flex flex-col items-center justify-center bg-black gap-4 z-50">
       <div className="w-12 h-12 border-4 border-purple-600/20 border-t-purple-600 rounded-full animate-spin" />
       <p className="text-[10px] font-black uppercase tracking-[0.4em] text-neutral-800">Establishing Archive Link...</p>
+      <button onClick={onBack} className="mt-8 text-[10px] font-black uppercase tracking-widest text-neutral-500 underline">Abort Sync</button>
+    </div>
+  );
+
+  if (error) return (
+    <div className="h-[100dvh] flex flex-col items-center justify-center bg-black p-10 gap-6 text-center">
+      <AlertCircle size={48} className="text-red-500 animate-pulse" />
+      <div className="space-y-2">
+        <h2 className="text-lg font-black uppercase tracking-tighter text-white">Archive Link Severed</h2>
+        <p className="text-[10px] font-black uppercase tracking-widest text-neutral-500">{error}</p>
+      </div>
+      <button 
+        onClick={() => window.location.reload()} 
+        className="px-10 py-4 bg-purple-600 rounded-full font-black uppercase text-[10px] tracking-[0.3em] active:scale-95 transition-all"
+      >
+        Re-establish Connection
+      </button>
+      <button onClick={onBack} className="text-[10px] font-black uppercase tracking-widest text-neutral-700">Return to Library</button>
     </div>
   );
 
@@ -284,19 +317,17 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
 
           <div className="flex items-center justify-center gap-6 md:gap-10 w-full py-4">
             <button onClick={() => { if(audioRef.current) audioRef.current.currentTime -= 15; }} className="p-4 text-neutral-400 hover:text-white transition-all active:scale-75">
-              <SkipBack size={28} fill="currentColor" />
+              <SkipBack size={32} fill="currentColor" />
             </button>
             <button onClick={togglePlay} className="w-20 h-20 md:w-24 md:h-24 gradient-aether rounded-full flex items-center justify-center shadow-lg active:scale-95 transition-all">
               {isPlaying ? <Pause size={38} className="text-white fill-current" /> : <Play size={38} className="text-white fill-current translate-x-1" />}
             </button>
             <button onClick={() => { if(audioRef.current) audioRef.current.currentTime += 30; }} className="p-4 text-neutral-400 hover:text-white transition-all active:scale-75">
-              <SkipForward size={28} fill="currentColor" />
+              <SkipForward size={32} fill="currentColor" />
             </button>
           </div>
 
-          {/* New Optimized 2-Column Bottom Controls */}
           <div className="grid grid-cols-2 gap-4 pb-2">
-            {/* Speed Control */}
             <div className="bg-neutral-900/40 rounded-[32px] p-5 flex flex-col items-center justify-center border border-white/5 backdrop-blur-md">
               <span className="text-[8px] font-black text-neutral-700 uppercase tracking-[0.2em] mb-3">Sync Speed</span>
               <div className="flex items-center gap-6">
@@ -316,7 +347,6 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
               </div>
             </div>
 
-            {/* Chapter Timer Control */}
             <div className={`bg-neutral-900/40 rounded-[32px] p-5 flex flex-col items-center justify-center border transition-all backdrop-blur-md ${sleepChapters > 0 ? 'border-purple-600/40 bg-purple-600/5' : 'border-white/5'}`}>
               <div className="flex items-center gap-2 mb-2">
                 <Timer size={10} className={sleepChapters > 0 ? 'text-purple-500' : 'text-neutral-700'} />
@@ -353,7 +383,6 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
         </div>
       </div>
 
-      {/* Chapters Index Sheet */}
       {showChapters && (
         <div className="fixed inset-0 z-[100] animate-fade-in flex flex-col bg-black">
           <header className="px-8 pt-10 pb-6 border-b border-white/5 flex justify-between items-center shrink-0">
@@ -378,7 +407,6 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
         </div>
       )}
 
-      {/* Item Info Sheet */}
       {showInfo && (
         <div className="fixed inset-0 z-[100] animate-fade-in flex items-center justify-center p-6 bg-black/95 backdrop-blur-xl">
           <div className="bg-neutral-900 w-full max-w-xl rounded-[56px] border border-white/10 overflow-hidden flex flex-col max-h-[85vh]">

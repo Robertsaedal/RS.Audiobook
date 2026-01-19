@@ -1,4 +1,3 @@
-
 import { ABSUser, ABSLibraryItem, ABSProgress } from '../types';
 import { io, Socket } from 'socket.io-client';
 
@@ -36,7 +35,7 @@ export class ABSService {
     });
   }
 
-  private static async fetchWithTimeout(url: string, options: RequestInit, timeout = 15000) {
+  private static async fetchWithTimeout(url: string, options: RequestInit, timeout = 10000) {
     const controller = new AbortController();
     const id = setTimeout(() => controller.abort(), timeout);
     try {
@@ -69,7 +68,7 @@ export class ABSService {
       }
       return response.json();
     } catch (err: any) {
-      if (err.message === 'TIMEOUT') throw new Error('Connection timed out. Check your server URL.');
+      if (err.message === 'TIMEOUT') throw new Error('Server link timeout. Check connection.');
       if (err.name === 'TypeError' && err.message === 'Failed to fetch') throw new Error('CORS_ERROR');
       throw err;
     }

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'rs-audio-v7';
+const CACHE_NAME = 'rs-audio-v8';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -27,7 +27,8 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // CRITICAL: Bypass Service Worker for anything related to audio or API calls
+  // CRITICAL: Aggressive bypass for any external server (DuckDNS) or dynamic data
+  // This prevents the Service Worker from adding latency to the audio stream or API
   if (
     url.hostname.includes('duckdns.org') || 
     url.pathname.endsWith('.m3u8') || 
@@ -40,7 +41,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Cache UI logic: Only cache static UI assets
+  // Only handle cache for known static UI assets
   if (STATIC_ASSETS.includes(url.pathname) || url.pathname.startsWith('/assets/')) {
     event.respondWith(
       caches.match(event.request).then((response) => {
@@ -50,20 +51,6 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Stale-While-Revalidate for JS modules from esm.sh
-  if (url.hostname.includes('esm.sh')) {
-    event.respondWith(
-      caches.match(event.request).then((cachedResponse) => {
-        const fetchPromise = fetch(event.request).then((networkResponse) => {
-          if (networkResponse.ok) {
-            const responseToCache = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseToCache));
-          }
-          return networkResponse;
-        }).catch(() => cachedResponse);
-
-        return cachedResponse || fetchPromise;
-      })
-    );
-  }
+  // Default to network for everything else
+  return;
 });
