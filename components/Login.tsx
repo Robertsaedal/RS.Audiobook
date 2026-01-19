@@ -9,8 +9,8 @@ interface LoginProps {
 }
 
 const Login: React.FC<LoginProps> = ({ onLogin }) => {
-  // PRE-FILLED: Replace 'YOUR_SUBDOMAIN' with your actual DuckDNS name
-  const [serverUrl, setServerUrl] = useState('https://YOUR_SUBDOMAIN.duckdns.org');
+  // PRE-FILLED: Specific server address for user
+  const [serverUrl, setServerUrl] = useState('https://rs-audio-server.duckdns.org');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);

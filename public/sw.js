@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'aether-hub-v3';
+const CACHE_NAME = 'aether-hub-v4';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -14,6 +14,9 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
+
+  // BYPASS: Do not intercept any requests to DuckDNS
+  if (url.hostname.includes('duckdns.org')) return;
 
   // Stale-While-Revalidate Strategy for book covers
   if (url.pathname.includes('/cover')) {

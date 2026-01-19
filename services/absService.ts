@@ -16,11 +16,9 @@ export class ABSService {
 
   private static normalizeUrl(url: string): string {
     let clean = url.trim().replace(/\/+$/, '');
-    // Remove /api if user included it, but keep the base
     clean = clean.replace(/\/api$/, '');
     
     if (clean && !clean.startsWith('http')) {
-      // If we are on a secure page, we must use https for the API
       const protocol = window.location.protocol === 'https:' ? 'https://' : 'http://';
       clean = `${protocol}${clean}`;
     }
@@ -55,9 +53,9 @@ export class ABSService {
       const response = await fetch(`${baseUrl}/login`, {
         method: 'POST',
         mode: 'cors',
+        credentials: 'include',
         headers: { 
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({ username: username.trim(), password }),
       });
@@ -81,6 +79,7 @@ export class ABSService {
       const response = await fetch(url, {
         ...options,
         mode: 'cors',
+        credentials: 'include',
         headers: {
           'Authorization': `Bearer ${this.token}`,
           'Content-Type': 'application/json',
@@ -145,6 +144,7 @@ export class ABSService {
       await fetch(`${this.serverUrl}/api/users/me/progress/${itemId}`, {
         method: 'PATCH',
         mode: 'cors',
+        credentials: 'include',
         headers: {
           'Authorization': `Bearer ${this.token}`,
           'Content-Type': 'application/json',
