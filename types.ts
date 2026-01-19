@@ -56,6 +56,17 @@ export interface ABSProgress {
   lastUpdate: number;
 }
 
+export interface ABSPlaybackSession {
+  id: string;
+  userId: string;
+  libraryItemId: string;
+  displayTitle: string;
+  displayAuthor: string;
+  duration: number;
+  playMethod: number; // 0=Direct, 1=HLS
+  mediaMetadata: any;
+}
+
 export interface AuthState {
   user: ABSUser | null;
   serverUrl: string;
