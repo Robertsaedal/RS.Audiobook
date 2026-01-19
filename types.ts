@@ -49,10 +49,6 @@ export interface ABSProgress {
   lastUpdate: number;
 }
 
-/**
- * Interface representing a playback session in Audiobookshelf.
- * Required by Player.tsx for managing the streaming session state.
- */
 export interface ABSPlaybackSession {
   id: string;
 }

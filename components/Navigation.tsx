@@ -1,8 +1,8 @@
 
 import React from 'react';
-import { Home, Book, Layers, LogOut, Activity } from 'lucide-react';
+import { Home, Layers, LogOut, Activity, Headphones } from 'lucide-react';
 
-export type NavTab = 'HOME' | 'BOOKS' | 'SERIES';
+export type NavTab = 'HOME' | 'SERIES';
 
 interface NavigationProps {
   activeTab: NavTab;
@@ -13,20 +13,30 @@ interface NavigationProps {
 const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange, onLogout }) => {
   const navItems = [
     { id: 'HOME' as NavTab, icon: Home, label: 'Home' },
-    { id: 'BOOKS' as NavTab, icon: Book, label: 'Books' },
     { id: 'SERIES' as NavTab, icon: Layers, label: 'Series' },
   ];
+
+  const Logo = () => (
+    <div className="flex items-center gap-3">
+      <div className="w-10 h-10 gradient-aether rounded-xl flex items-center justify-center shadow-lg shadow-aether-purple/20">
+        <Headphones className="text-white" size={20} />
+      </div>
+      <div>
+        <h2 className="text-xl font-black tracking-tighter text-white">R.S AUDIO</h2>
+        <div className="flex items-center gap-2">
+          <Activity size={8} className="text-aether-purple" />
+          <p className="text-[7px] uppercase tracking-[0.4em] text-neutral-500 font-black">Spec V5.0</p>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <>
       {/* Sidebar - Desktop */}
       <aside className="hidden md:flex flex-col w-64 h-screen fixed left-0 top-0 bg-neutral-950 border-r border-white/5 z-50 p-8">
         <div className="mb-12">
-          <h2 className="text-2xl font-black tracking-tighter text-aether-purple drop-shadow-aether-glow">R.S AUDIO</h2>
-          <div className="flex items-center gap-2 mt-1">
-            <Activity size={8} className="text-neutral-700" />
-            <p className="text-[8px] uppercase tracking-[0.4em] text-neutral-700 font-black">Spec V4.0</p>
-          </div>
+          <Logo />
         </div>
 
         <nav className="flex-1 space-y-2">

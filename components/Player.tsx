@@ -3,8 +3,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { AuthState, ABSLibraryItem, ABSChapter, ABSPlaybackSession } from '../types';
 import { ABSService } from '../services/absService';
 import Hls from 'hls.js';
-// Added ArrowRight and Activity to the lucide-react imports
-import { ChevronDown, Play, Pause, RotateCcw, RotateCw, SkipBack, SkipForward, Timer, Info, X, Clock, ArrowRight, Activity } from 'lucide-react';
+import { ChevronDown, Play, Pause, RotateCcw, RotateCw, SkipBack, SkipForward, Timer, Info, X, Clock, ArrowRight, Activity, Plus, Minus } from 'lucide-react';
 
 interface PlayerProps {
   auth: AuthState;
@@ -15,7 +14,7 @@ interface PlayerProps {
 const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const syncIntervalRef = useRef<number | null>(null);
-  const sleepTimerRef = useRef<number | null>(null);
+  const sleepTimerIntervalRef = useRef<number | null>(null);
   const hlsRef = useRef<Hls | null>(null);
   const isMounted = useRef(true);
   
@@ -28,7 +27,7 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
   const [session, setSession] = useState<ABSPlaybackSession | null>(null);
-  const [sleepTimeRemaining, setSleepTimeRemaining] = useState<number | null>(null);
+  const [sleepSeconds, setSleepSeconds] = useState<number | null>(null);
 
   const absService = useMemo(() => new ABSService(auth.serverUrl, auth.user?.token || ''), [auth]);
   const duration = item.media.duration || 0;
@@ -72,7 +71,7 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
       navigator.mediaSession.metadata = new MediaMetadata({
         title: item.media.metadata.title,
         artist: item.media.metadata.authorName,
-        album: item.media.metadata.seriesName || 'Audiobook',
+        album: item.media.metadata.seriesName || 'R.S Audio',
         artwork: [{ src: coverUrl, sizes: '512x512', type: 'image/png' }]
       });
 
@@ -134,7 +133,7 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
     return () => { 
       isMounted.current = false;
       hlsRef.current?.destroy();
-      if (sleepTimerRef.current) clearInterval(sleepTimerRef.current);
+      if (sleepTimerIntervalRef.current) clearInterval(sleepTimerIntervalRef.current);
     };
   }, [item.id, absService, setupMediaSession, auth]);
 
@@ -153,29 +152,31 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
     if (audioRef.current) audioRef.current.playbackRate = playbackSpeed;
   }, [playbackSpeed]);
 
-  const startSleepTimer = (minutes: number | 'end_chapter') => {
-    if (sleepTimerRef.current) clearInterval(sleepTimerRef.current);
-    setShowSleep(false);
-
-    let seconds = 0;
-    if (minutes === 'end_chapter') {
-      seconds = Math.floor(chapterRemaining);
+  // Sleep Timer Logic
+  useEffect(() => {
+    if (sleepSeconds !== null && sleepSeconds > 0) {
+      sleepTimerIntervalRef.current = window.setInterval(() => {
+        setSleepSeconds(prev => {
+          if (prev !== null && prev <= 1) {
+            audioRef.current?.pause();
+            setIsPlaying(false);
+            return 0;
+          }
+          return prev !== null ? prev - 1 : null;
+        });
+      }, 1000);
     } else {
-      seconds = minutes * 60;
+      if (sleepTimerIntervalRef.current) clearInterval(sleepTimerIntervalRef.current);
     }
+    return () => { if (sleepTimerIntervalRef.current) clearInterval(sleepTimerIntervalRef.current); };
+  }, [sleepSeconds]);
 
-    setSleepTimeRemaining(seconds);
-    sleepTimerRef.current = window.setInterval(() => {
-      setSleepTimeRemaining(prev => {
-        if (prev !== null && prev <= 1) {
-          audioRef.current?.pause();
-          setIsPlaying(false);
-          clearInterval(sleepTimerRef.current!);
-          return null;
-        }
-        return prev !== null ? prev - 1 : null;
-      });
-    }, 1000);
+  const adjustSleepTimer = (minutes: number) => {
+    setSleepSeconds(prev => {
+      const current = prev || 0;
+      const next = current + (minutes * 60);
+      return next <= 0 ? null : next;
+    });
   };
 
   const formatTime = (s: number) => {
@@ -197,13 +198,16 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
         onPlay={() => setIsPlaying(true)}
         onPause={() => setIsPlaying(false)}
         onEnded={() => setIsPlaying(false)} 
-        preload="auto" 
+        preload="auto"
+        crossOrigin="anonymous"
       />
       
       <header className="px-8 pt-10 pb-4 flex justify-between items-center z-20 shrink-0">
         <button onClick={onBack} className="text-[10px] font-black uppercase tracking-[0.2em] text-neutral-500 bg-neutral-900/40 px-4 py-2 rounded-full border border-white/5">Exit Player</button>
         <button onClick={() => setShowChapters(true)} className="flex items-center gap-2 bg-neutral-900/60 px-4 py-2 rounded-full border border-white/5 group active:scale-95 transition-all">
-          <span className="text-[9px] font-black uppercase tracking-[0.2em] text-aether-purple">Current: {currentChapter?.title || 'Archive'}</span>
+          <span className="text-[9px] font-black uppercase tracking-[0.2em] text-aether-purple truncate max-w-[120px]">
+            {currentChapter?.title || 'Index'}
+          </span>
           <ChevronDown size={14} className="text-aether-purple group-hover:translate-y-0.5 transition-transform" />
         </button>
       </header>
@@ -218,10 +222,10 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
             <div className="absolute top-6 right-6 p-3 rounded-full bg-black/40 backdrop-blur-xl border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity">
               <Info size={18} className="text-white" />
             </div>
-            {sleepTimeRemaining && (
+            {sleepSeconds !== null && sleepSeconds > 0 && (
                <div className="absolute top-6 left-6 flex items-center gap-2 bg-aether-purple/90 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 shadow-2xl animate-pulse">
                  <Timer size={14} className="text-white" />
-                 <span className="text-[10px] font-black font-mono text-white">{formatTime(sleepTimeRemaining)}</span>
+                 <span className="text-[10px] font-black font-mono text-white">{formatTime(sleepSeconds)}</span>
                </div>
             )}
             <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent rounded-[64px]" />
@@ -233,7 +237,7 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
             {item.media.metadata.seriesName && (
               <div className="px-3 py-1 rounded-full bg-neutral-900 border border-white/10 mb-1">
                 <span className="text-[9px] font-black uppercase tracking-widest text-neutral-400">
-                  {item.media.metadata.seriesName} #{item.media.metadata.sequence || '1'}
+                  {item.media.metadata.seriesName} #{item.media.metadata.sequence}
                 </span>
               </div>
             )}
@@ -263,7 +267,7 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
           </div>
 
           <div className="flex items-center justify-center gap-4 md:gap-8 w-full py-4">
-            <button onClick={() => startSleepTimer('end_chapter')} className={`p-4 rounded-2xl transition-all active:scale-90 ${sleepTimeRemaining ? 'text-aether-purple bg-aether-purple/10 border border-aether-purple/20' : 'text-neutral-600 hover:text-white'}`} title="Suspend at End of Chapter">
+            <button onClick={() => setShowSleep(true)} className={`p-4 rounded-2xl transition-all active:scale-90 ${sleepSeconds ? 'text-aether-purple bg-aether-purple/10 border border-aether-purple/20' : 'text-neutral-600 hover:text-white'}`} title="Suspend Archives">
               <Timer size={22} />
             </button>
             <button onClick={() => skipChapter(-1)} className="p-4 text-neutral-400 hover:text-white transition-all active:scale-90">
@@ -281,7 +285,7 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
             <button onClick={() => skipChapter(1)} className="p-4 text-neutral-400 hover:text-white transition-all active:scale-90">
               <SkipForward size={26} fill="currentColor" />
             </button>
-            <button onClick={() => setShowSleep(true)} className={`p-4 rounded-2xl transition-all active:scale-90 ${showSleep ? 'text-white' : 'text-neutral-600 hover:text-white'}`}>
+            <button onClick={() => setShowChapters(true)} className={`p-4 rounded-2xl transition-all active:scale-90 ${showChapters ? 'text-white' : 'text-neutral-600 hover:text-white'}`}>
               <Clock size={22} />
             </button>
           </div>
@@ -296,9 +300,9 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
               </div>
             </div>
             <div className="bg-neutral-900/40 rounded-[32px] p-5 flex flex-col items-center justify-center border border-white/5 backdrop-blur-md">
-               <span className="text-[8px] font-black text-neutral-700 uppercase tracking-[0.2em] mb-3">Archive Index</span>
+               <span className="text-[8px] font-black text-neutral-700 uppercase tracking-[0.2em] mb-3">Index Record</span>
                <button onClick={() => setShowChapters(true)} className="text-[10px] font-black uppercase text-white tracking-widest flex items-center gap-2">
-                 View Chapters
+                 Chapters
                  <ArrowRight size={10} />
                </button>
             </div>
@@ -306,11 +310,11 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
         </div>
       </div>
 
-      {/* Overlays remain the same logic but styled for responsiveness */}
+      {/* Chapter Sheet Overlay */}
       {showChapters && (
         <div className="fixed inset-0 z-[100] animate-fade-in flex flex-col bg-black">
           <header className="px-8 pt-10 pb-6 border-b border-white/5 flex justify-between items-center shrink-0">
-            <h2 className="text-xl font-black uppercase tracking-widest text-aether-purple">Index Record</h2>
+            <h2 className="text-xl font-black uppercase tracking-widest text-aether-purple">Archive Index</h2>
             <button onClick={() => setShowChapters(false)} className="bg-neutral-900 p-2.5 rounded-full text-neutral-500"><X size={20}/></button>
           </header>
           <div className="flex-1 overflow-y-auto p-4 no-scrollbar max-w-2xl mx-auto w-full">
@@ -365,7 +369,7 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
         </div>
       )}
 
-      {/* Sleep Timer Overlay */}
+      {/* Advanced Sleep Timer Overlay */}
       {showSleep && (
         <div className="fixed inset-0 z-[100] animate-fade-in flex items-end justify-center bg-black/80 backdrop-blur-sm">
           <div className="bg-neutral-950 w-full max-w-md rounded-t-[56px] p-12 space-y-10 animate-slide-up border-t border-white/10">
@@ -373,31 +377,46 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
               <h3 className="text-[11px] font-black uppercase tracking-[0.6em] text-neutral-600">Archive Suspension</h3>
               <button onClick={() => setShowSleep(false)} className="text-neutral-500 hover:text-white transition-colors"><X size={24}/></button>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              {[15, 30, 45, 60].map(mins => (
+            
+            <div className="flex flex-col items-center justify-center py-8 space-y-8">
+              <div className="flex items-center gap-12">
                 <button 
-                  key={mins} 
-                  onClick={() => startSleepTimer(mins)}
-                  className="bg-neutral-900 py-6 rounded-[32px] text-[11px] font-black uppercase tracking-widest hover:bg-aether-purple/20 transition-all border border-white/5 text-neutral-400 hover:text-white"
+                  onClick={() => adjustSleepTimer(-5)}
+                  className="w-16 h-16 rounded-full bg-neutral-900 border border-white/5 flex items-center justify-center text-white active:scale-90 transition-all hover:border-aether-purple/40"
                 >
-                  {mins} Minutes
+                  <Minus size={24} />
                 </button>
-              ))}
-              <button 
-                onClick={() => startSleepTimer('end_chapter')}
-                className="col-span-2 bg-aether-purple/10 py-6 rounded-[32px] text-[11px] font-black uppercase tracking-widest hover:bg-aether-purple/30 transition-all border border-aether-purple/20 text-aether-purple"
-              >
-                At End of Chapter
-              </button>
+                <div className="text-center">
+                  <div className="text-4xl font-black font-mono text-white mb-2">
+                    {sleepSeconds ? formatTime(sleepSeconds) : '00:00'}
+                  </div>
+                  <span className="text-[9px] font-black uppercase tracking-[0.4em] text-neutral-700">Time to suspension</span>
+                </div>
+                <button 
+                  onClick={() => adjustSleepTimer(5)}
+                  className="w-16 h-16 rounded-full bg-neutral-900 border border-white/5 flex items-center justify-center text-white active:scale-90 transition-all hover:border-aether-purple/40"
+                >
+                  <Plus size={24} />
+                </button>
+              </div>
             </div>
-            {sleepTimeRemaining && (
-               <button 
-                 onClick={() => { if (sleepTimerRef.current) clearInterval(sleepTimerRef.current); setSleepTimeRemaining(null); setShowSleep(false); }}
-                 className="w-full py-4 text-[10px] font-black text-red-500 uppercase tracking-[0.4em] hover:bg-red-500/5 rounded-2xl transition-all"
-               >
-                 Abort Active Suspension
-               </button>
-            )}
+
+            <div className="grid grid-cols-1 gap-4">
+              <button 
+                onClick={() => { setSleepSeconds(Math.floor(chapterRemaining)); setShowSleep(false); }}
+                className="bg-aether-purple/10 py-6 rounded-[32px] text-[11px] font-black uppercase tracking-widest hover:bg-aether-purple/20 transition-all border border-aether-purple/20 text-aether-purple"
+              >
+                Suspension at End of Chapter
+              </button>
+              {sleepSeconds !== null && (
+                <button 
+                  onClick={() => { setSleepSeconds(null); setShowSleep(false); }}
+                  className="py-4 text-[10px] font-black text-red-500 uppercase tracking-[0.4em] hover:bg-red-500/5 rounded-2xl transition-all"
+                >
+                  Deactivate Suspension
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}
