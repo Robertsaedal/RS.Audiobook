@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { AuthState, ABSLibraryItem } from '../types';
+import { AuthState, ABSLibraryItem, ABSProgress } from '../types';
 import { ABSService } from '../services/absService';
 
 interface LibraryProps {
@@ -21,11 +21,8 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
   
   const [bookSort, setBookSort] = useState<SortOption>('RECENT');
   const [bookSortDesc, setBookSortDesc] = useState(true);
-  const [seriesSort, setSeriesSort] = useState<SortOption>('ALPHA');
-  const [seriesSortDesc, setSeriesSortDesc] = useState(false);
-
+  
   const scrollRef = useRef<HTMLDivElement>(null);
-  const touchStartY = useRef<number>(0);
   const absService = useMemo(() => new ABSService(auth.serverUrl, auth.user?.token || ''), [auth]);
 
   const fetchData = async (isRefresh = false) => {
@@ -45,9 +42,25 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
 
   useEffect(() => {
     fetchData();
+
+    // WebSocket Listeners for real-time sync
+    absService.onProgressUpdate((updatedProgress: ABSProgress) => {
+      setItems(prevItems => prevItems.map(item => {
+        if (item.id === updatedProgress.itemId) {
+          return { ...item, userProgress: updatedProgress };
+        }
+        return item;
+      }));
+    });
+
+    absService.onLibraryUpdate(() => {
+      fetchData(true);
+    });
+
+    return () => absService.disconnect();
   }, [absService]);
 
-  // OFFICIAL LOGIC: Find most recently played unfinished item
+  // Use /api/me/progress logic to find currently playing
   const currentlyPlayingBook = useMemo(() => {
     const unfinished = items.filter(item => {
       const p = item.userProgress;
@@ -63,7 +76,6 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
     })[0];
   }, [items]);
 
-  // OFFICIAL LOGIC: Sorted list based on addedDate (Strict ms comparison)
   const sortedItems = useMemo(() => {
     let result = items.filter(item => 
       item.media?.metadata?.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -86,7 +98,6 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
     return result;
   }, [items, searchTerm, bookSort, bookSortDesc]);
 
-  // SERIES GROUPING: Official metadata handling
   const seriesGroups = useMemo(() => {
     const grouped = items.reduce((acc: Record<string, ABSLibraryItem[]>, item) => {
       const sName = item.media.metadata.seriesName;
@@ -97,32 +108,22 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
       return acc;
     }, {});
 
-    const groups = Object.entries(grouped).map(([name, groupItems]) => {
+    return Object.entries(grouped).map(([name, groupItems]) => {
       const sortedBySeq = [...groupItems].sort((a, b) => {
         const sA = parseFloat(a.media.metadata.sequence || '0');
         const sB = parseFloat(b.media.metadata.sequence || '0');
         return sA - sB;
       });
-      const book1 = sortedBySeq.find(i => parseFloat(i.media.metadata.sequence || '0') === 1) || sortedBySeq[0];
-      const maxAdded = Math.max(...groupItems.map(i => Number(i.addedDate)));
-
+      const book1 = sortedBySeq[0];
       return {
         id: `series-${name}`,
         name: name,
         items: sortedBySeq,
         bookCount: groupItems.length,
         coverUrl: absService.getCoverUrl(book1.id),
-        latestAddedDate: maxAdded
       };
-    });
-
-    if (seriesSort === 'RECENT') {
-      groups.sort((a, b) => seriesSortDesc ? b.latestAddedDate - a.latestAddedDate : a.latestAddedDate - b.latestAddedDate);
-    } else {
-      groups.sort((a, b) => seriesSortDesc ? b.name.localeCompare(a.name) : a.name.localeCompare(b.name));
-    }
-    return groups;
-  }, [items, absService, seriesSort, seriesSortDesc]);
+    }).sort((a, b) => a.name.localeCompare(b.name));
+  }, [items, absService]);
 
   const filteredSeries = useMemo(() => {
     const term = searchTerm.toLowerCase();
@@ -130,27 +131,13 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
     return seriesGroups.filter(g => g.name.toLowerCase().includes(term));
   }, [seriesGroups, searchTerm]);
 
-  // PULL TO REFRESH LOGIC
-  const handleTouchStart = (e: React.TouchEvent) => {
-    if (scrollRef.current?.scrollTop === 0) {
-      touchStartY.current = e.touches[0].clientY;
-    }
-  };
-
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    const touchEndY = e.changedTouches[0].clientY;
-    if (scrollRef.current?.scrollTop === 0 && touchEndY - touchStartY.current > 100) {
-      fetchData(true);
-    }
-  };
-
   return (
     <div className="flex-1 flex flex-col safe-top overflow-hidden bg-black h-[100dvh]">
       <div className="px-6 pt-6 pb-2 space-y-4 shrink-0">
         <div className="flex justify-between items-center">
           <div>
             <h2 className="text-2xl font-black tracking-tight text-aether-purple drop-shadow-aether-glow">AETHER HUB</h2>
-            <p className="text-[8px] uppercase tracking-[0.4em] text-neutral-600 font-black">Digital PWA Engine</p>
+            <p className="text-[8px] uppercase tracking-[0.4em] text-neutral-600 font-black">WebSocket Stream Active</p>
           </div>
           <button onClick={onLogout} className="text-[10px] font-black uppercase tracking-widest text-neutral-600 hover:text-white transition-colors">
             Logout
@@ -184,12 +171,7 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
         ))}
       </nav>
 
-      <div 
-        ref={scrollRef}
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
-        className="flex-1 overflow-y-auto px-6 py-6 no-scrollbar scroll-container pb-24 touch-pan-y"
-      >
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-6 py-6 no-scrollbar scroll-container pb-24 touch-pan-y">
         {loading ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-8">
             {[1, 2, 3, 4, 5, 6].map(i => <div key={i} className="aspect-square bg-neutral-900/50 rounded-2xl animate-pulse border border-white/5" />)}
@@ -216,7 +198,7 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
                         <div className="absolute inset-0 bg-black/20" />
                       </div>
                       <div className="flex-1 p-6 flex flex-col justify-center min-w-0">
-                        <span className="text-[8px] font-black uppercase tracking-[0.3em] text-aether-purple mb-1">Continue Journey</span>
+                        <span className="text-[8px] font-black uppercase tracking-[0.3em] text-aether-purple mb-1">In Sync</span>
                         <h4 className="text-xl font-black uppercase tracking-tight text-white leading-tight truncate">{currentlyPlayingBook.media.metadata.title}</h4>
                         <p className="text-[10px] font-black text-neutral-500 uppercase tracking-widest mb-4 truncate">{currentlyPlayingBook.media.metadata.authorName}</p>
                         <div className="w-full h-1.5 bg-black/40 rounded-full overflow-hidden border border-white/5">
@@ -226,15 +208,15 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
                     </div>
                   ) : (
                     <div className="bg-neutral-900/20 rounded-[32px] p-12 text-center border border-dashed border-white/10">
-                      <p className="text-[10px] font-black uppercase tracking-[0.4em] text-neutral-700">No active sessions. Explore the library.</p>
+                      <p className="text-[10px] font-black uppercase tracking-[0.4em] text-neutral-700">No active sessions.</p>
                     </div>
                   )}
                 </section>
 
                 <section className="space-y-6">
                   <div className="flex justify-between items-center">
-                    <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-neutral-600">Recently Added</h3>
-                    <button onClick={() => setActiveTab('BOOKS')} className="text-[10px] font-black uppercase tracking-widest text-aether-purple">View All</button>
+                    <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-neutral-600">Recent Discoveries</h3>
+                    <button onClick={() => setActiveTab('BOOKS')} className="text-[10px] font-black uppercase tracking-widest text-aether-purple">Explore All</button>
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6">
                     {sortedItems.slice(0, 6).map(item => (
@@ -248,19 +230,16 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
             {activeTab === 'BOOKS' && (
               <section className="space-y-8">
                 <div className="flex justify-between items-center">
-                  <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-neutral-600">Library Index</h3>
+                  <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-neutral-600">The Collection</h3>
                   <div className="flex items-center bg-neutral-900 rounded-lg pr-2">
                     <select 
                       value={bookSort} 
                       onChange={(e) => setBookSort(e.target.value as any)}
                       className="bg-transparent text-[10px] font-black uppercase tracking-widest text-white border-none py-2 px-3 appearance-none cursor-pointer"
                     >
-                      <option value="RECENT">Added Date</option>
-                      <option value="ALPHA">A-Z</option>
+                      <option value="RECENT">Added</option>
+                      <option value="ALPHA">Name</option>
                     </select>
-                    <button onClick={() => setBookSortDesc(!bookSortDesc)} className="text-neutral-500 hover:text-white p-1">
-                      <svg className={`w-4 h-4 transition-transform ${bookSortDesc ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M7 11l5-5m0 0l5 5m-5-5v12" /></svg>
-                    </button>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-y-10 gap-x-6">
@@ -273,31 +252,11 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
 
             {activeTab === 'SERIES' && (
               <section className="space-y-8">
-                {selectedSeries ? (
-                  <div className="animate-fade-in">
-                    <button onClick={() => setSelectedSeries(null)} className="flex items-center gap-2 text-aether-purple mb-6 text-[10px] font-black uppercase tracking-widest active:scale-95">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M15 19l-7-7 7-7"/></svg>
-                      Back to Collections
-                    </button>
-                    <h3 className="text-2xl font-black uppercase tracking-tight text-white mb-8">{selectedSeries.name}</h3>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-y-10 gap-x-6">
-                      {selectedSeries.items.map((item: any) => (
-                        <BookCard key={item.id} item={item} onClick={() => onSelectItem(item)} coverUrl={absService.getCoverUrl(item.id)} />
-                      ))}
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <div className="flex justify-between items-center">
-                      <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-neutral-600">Series Stacks</h3>
-                    </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-y-12 gap-x-6">
-                      {filteredSeries.map(group => (
-                        <SeriesCard key={group.id} group={group} onClick={() => setSelectedSeries(group)} />
-                      ))}
-                    </div>
-                  </>
-                )}
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-y-12 gap-x-6">
+                  {filteredSeries.map(group => (
+                    <SeriesCard key={group.id} group={group} onClick={() => setSelectedSeries(group)} />
+                  ))}
+                </div>
               </section>
             )}
           </div>
@@ -313,7 +272,6 @@ const BookCard = ({ item, onClick, coverUrl }: { item: ABSLibraryItem, onClick: 
     <button onClick={onClick} className="flex flex-col text-left group transition-all active:scale-95 animate-fade-in">
       <div className="aspect-square w-full bg-neutral-900 rounded-[32px] overflow-hidden mb-4 relative shadow-2xl border border-white/5 group-hover:border-aether-purple/50 transition-all">
         <img src={coverUrl} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" loading="lazy" />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-40" />
         {isFinished && (
           <div className="absolute top-3 right-3 bg-green-500 w-7 h-7 rounded-full flex items-center justify-center border-2 border-black/20 shadow-xl z-10">
             <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={4} d="M5 13l4 4L19 7"/></svg>
@@ -332,9 +290,6 @@ const SeriesCard = ({ group, onClick }: { group: any, onClick: () => void }) => 
       <div className="absolute inset-0 bg-neutral-800 rounded-[32px] border border-white/5 opacity-40 translate-x-2 -translate-y-2 z-0" />
       <div className="absolute inset-0 bg-neutral-900 rounded-[32px] overflow-hidden shadow-2xl border border-white/5 group-hover:border-aether-purple/50 transition-all z-10">
         <img src={group.coverUrl} className="w-full h-full object-cover" loading="lazy" />
-      </div>
-      <div className="absolute -top-1 -right-1 bg-aether-purple w-9 h-9 flex items-center justify-center rounded-full shadow-2xl z-20 border border-black/20">
-        <span className="text-[13px] font-black text-white">{group.bookCount}</span>
       </div>
     </div>
     <h3 className="text-[14px] font-bold text-center text-white/90 uppercase tracking-tight truncate px-1">{group.name}</h3>
