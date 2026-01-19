@@ -55,10 +55,13 @@ export class ABSService {
   static async login(serverUrl: string, username: string, password: string): Promise<any> {
     const baseUrl = this.normalizeUrl(serverUrl);
     try {
+      // SIMPLIFIED FETCH: Remove custom headers to avoid Preflight/CORS issues
       const response = await this.fetchWithTimeout(`${baseUrl}/login`, {
         method: 'POST',
         mode: 'cors',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json' 
+        },
         body: JSON.stringify({ username: username.trim(), password }),
       });
 
@@ -133,13 +136,11 @@ export class ABSService {
   async saveProgress(itemId: string, currentTime: number, duration: number): Promise<void> {
     const progressData = {
       currentTime,
-      duration,
       progress: duration > 0 ? currentTime / duration : 0,
-      isFinished: currentTime >= duration - 10 && duration > 0,
-      lastUpdate: Date.now()
+      isFinished: currentTime >= duration - 10 && duration > 0
     };
     try {
-      await fetch(`${this.serverUrl}/api/users/me/progress/${itemId}`, {
+      await fetch(`${this.serverUrl}/api/me/progress/${itemId}`, {
         method: 'PATCH',
         mode: 'cors',
         headers: {

@@ -112,7 +112,7 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
         if (isLoading && isMounted.current) {
           setError('Unable to stream from server. Link timed out.');
           setIsLoading(false);
-          hlsRef.current?.destroy();
+          if (hlsRef.current) hlsRef.current.destroy();
         }
       }, 10000);
 
@@ -132,9 +132,10 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
         const progress = details.userProgress || await absService.getProgress(item.id);
         const startAt = progress?.currentTime || 0;
 
-        if (audioRef.current) {
-          // Mandatory for iOS/iPad playback from remote server
-          audioRef.current.crossOrigin = 'anonymous';
+        const audio = audioRef.current;
+        if (audio) {
+          // CRITICAL: Set crossOrigin BEFORE any source assignment
+          audio.crossOrigin = 'anonymous';
           
           const hlsUrl = `${auth.serverUrl}/api/items/${item.id}/play/${playbackSession.id}/hls/m3u8?token=${auth.user?.token}`;
           
@@ -143,19 +144,18 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
             
             const hls = new Hls({ 
               enableWorker: true,
-              maxBufferLength: 20,
-              maxMaxBufferLength: 40,
+              maxBufferLength: 15,
+              maxMaxBufferLength: 30,
               startPosition: startAt,
               autoStartLoad: true,
               lowLatencyMode: true,
               backBufferLength: 60,
-              // Optimize for snappier startup
-              manifestLoadingMaxRetry: 3,
-              levelLoadingMaxRetry: 3
+              manifestLoadingMaxRetry: 5,
+              levelLoadingMaxRetry: 5
             });
             
             hlsRef.current = hls;
-            hls.attachMedia(audioRef.current);
+            hls.attachMedia(audio);
             
             hls.on(Hls.Events.MEDIA_ATTACHED, () => {
               hls.loadSource(hlsUrl);
@@ -170,6 +170,7 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
 
             hls.on(Hls.Events.ERROR, (_, data) => {
               if (data.fatal) {
+                if (loadTimeoutRef.current) clearTimeout(loadTimeoutRef.current);
                 switch (data.type) {
                   case Hls.ErrorTypes.NETWORK_ERROR:
                     console.error("Fatal Network Error:", data);
@@ -181,26 +182,32 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
                     break;
                   default:
                     if (isMounted.current) {
-                      setError("Unable to stream from server. Connection broken.");
+                      setError("Unable to stream from server. Link failed.");
                       hls.destroy();
+                      setIsLoading(false);
                     }
                     break;
                 }
               }
             });
-          } else if (audioRef.current.canPlayType('application/vnd.apple.mpegurl')) {
+          } else if (audio.canPlayType('application/vnd.apple.mpegurl')) {
             // Native HLS (iOS/Safari)
-            audioRef.current.src = hlsUrl;
-            audioRef.current.addEventListener('loadedmetadata', () => {
-              if (audioRef.current && isMounted.current) {
+            audio.src = hlsUrl;
+            
+            // For iOS, wait for canplay to seek correctly
+            const onCanPlay = () => {
+              if (isMounted.current) {
                 if (loadTimeoutRef.current) clearTimeout(loadTimeoutRef.current);
-                audioRef.current.currentTime = startAt;
+                audio.currentTime = startAt;
                 setCurrentTime(startAt);
                 setIsLoading(false);
               }
-            }, { once: true });
+              audio.removeEventListener('canplay', onCanPlay);
+            };
+
+            audio.addEventListener('canplay', onCanPlay);
             
-            audioRef.current.addEventListener('error', () => {
+            audio.addEventListener('error', () => {
               if (isMounted.current) {
                 if (loadTimeoutRef.current) clearTimeout(loadTimeoutRef.current);
                 setError("Unable to stream from server. Native decoder failed.");
@@ -239,8 +246,12 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
   }, [item.id, duration, absService]);
 
   useEffect(() => {
-    if (isPlaying) syncIntervalRef.current = window.setInterval(saveProgress, 15000);
-    return () => { if (syncIntervalRef.current) clearInterval(syncIntervalRef.current); saveProgress(); };
+    // Sync progress to server every 10 seconds while playing
+    if (isPlaying) syncIntervalRef.current = window.setInterval(saveProgress, 10000);
+    return () => { 
+      if (syncIntervalRef.current) clearInterval(syncIntervalRef.current); 
+      saveProgress(); 
+    };
   }, [isPlaying, saveProgress]);
 
   useEffect(() => {

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'rs-audio-v8';
+const CACHE_NAME = 'rs-audio-v9';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -27,16 +27,13 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // CRITICAL: Aggressive bypass for any external server (DuckDNS) or dynamic data
-  // This prevents the Service Worker from adding latency to the audio stream or API
+  // NO-INTERFERE: Early return for DuckDNS and API requests to avoid CORS/latency hangs
   if (
     url.hostname.includes('duckdns.org') || 
-    url.pathname.endsWith('.m3u8') || 
-    url.pathname.endsWith('.ts') ||
-    url.pathname.includes('/hls/') ||
-    url.pathname.includes('/socket.io') ||
     url.pathname.includes('/api/') ||
-    event.request.method !== 'GET'
+    url.pathname.includes('/socket.io') ||
+    url.pathname.endsWith('.m3u8') || 
+    url.pathname.endsWith('.ts')
   ) {
     return;
   }
