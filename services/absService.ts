@@ -1,10 +1,12 @@
 
 import { ABSUser, ABSLibraryItem, ABSSeries, ABSProgress } from '../types';
+import { io, Socket } from 'socket.io-client';
 
 export class ABSService {
   private serverUrl: string;
   private token: string;
   private libraryId: string | null = null;
+  private socket: Socket | null = null;
   private syncQueueKey = 'abs_sync_queue';
 
   constructor(serverUrl: string, token: string) {
@@ -14,7 +16,33 @@ export class ABSService {
     }
     this.serverUrl = cleanUrl;
     this.token = token;
+    this.initSocket();
     this.processSyncQueue();
+  }
+
+  private initSocket() {
+    this.socket = io(this.serverUrl, {
+      auth: { token: this.token },
+      transports: ['websocket'],
+      autoConnect: true,
+    });
+
+    this.socket.on('connect', () => console.log('ABS WebSocket Connected'));
+    this.socket.on('connect_error', (err) => console.error('Socket Error:', err));
+  }
+
+  onProgressUpdate(callback: (progress: ABSProgress) => void) {
+    this.socket?.on('user_item_progress_updated', (data) => {
+      // Data shape varies based on ABS version, usually includes progress object
+      if (data && data.itemId) {
+        callback(data);
+      }
+    });
+  }
+
+  onLibraryUpdate(callback: () => void) {
+    this.socket?.on('item_added', callback);
+    this.socket?.on('item_removed', callback);
   }
 
   static async login(serverUrl: string, username: string, password: string): Promise<any> {
@@ -27,10 +55,7 @@ export class ABSService {
       method: 'POST',
       mode: 'cors',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        username: username.trim(), 
-        password: password 
-      }),
+      body: JSON.stringify({ username: username.trim(), password }),
     });
 
     if (!response.ok) {
@@ -67,37 +92,42 @@ export class ABSService {
     return response.text();
   }
 
+  async getMeProgress(): Promise<any> {
+    // Optimized endpoint for populating Home screen
+    return this.fetchApi('/api/me/progress');
+  }
+
+  // Added getProgress method to resolve error in Player.tsx line 72
+  async getProgress(itemId: string): Promise<ABSProgress | null> {
+    return this.fetchApi(`/api/me/progress/${itemId}`);
+  }
+
   async ensureLibraryId(): Promise<string> {
     if (this.libraryId) return this.libraryId;
-    // Official spec: GET /api/libraries
     const data = await this.fetchApi('/api/libraries');
     const libraries = data?.libraries || data || [];
     const audioLibrary = libraries.find((l: any) => l.mediaType === 'audiobook') || libraries[0];
-    if (!audioLibrary) throw new Error("No audiobook library found");
+    if (!audioLibrary) throw new Error("No library found");
     this.libraryId = audioLibrary.id;
     return this.libraryId!;
   }
 
   async getLibraryItems(): Promise<ABSLibraryItem[]> {
     const libId = await this.ensureLibraryId();
-    // Official spec: GET /api/libraries/:id/items?include=progress
     const data = await this.fetchApi(`/api/libraries/${libId}/items?include=progress`);
-    // API returns { results: [], ... }
     return data?.results || data || [];
   }
 
   async getItemDetails(id: string): Promise<ABSLibraryItem> {
-    // Official spec: GET /api/items/:id?include=progress
     return this.fetchApi(`/api/items/${id}?include=progress`);
   }
 
-  async getProgress(id: string): Promise<ABSProgress | null> {
-    // Official spec: GET /api/users/me/progress/:id
-    return this.fetchApi(`/api/users/me/progress/${id}`);
+  async startPlaybackSession(itemId: string): Promise<any> {
+    // Mandatory for tracking and HLS
+    return this.fetchApi(`/api/items/${itemId}/play`, { method: 'POST' });
   }
 
   async saveProgress(itemId: string, currentTime: number, duration: number): Promise<void> {
-    // Timestamps handled as millisecond integers
     const progressData = {
       currentTime,
       duration,
@@ -106,7 +136,6 @@ export class ABSService {
       lastUpdate: Date.now()
     };
 
-    // Cache position locally for instant recovery
     localStorage.setItem(`rs_pos_${itemId}`, currentTime.toString());
 
     if (!navigator.onLine) {
@@ -115,7 +144,6 @@ export class ABSService {
     }
 
     try {
-      // Official spec: PATCH /api/users/me/progress/:id
       await fetch(`${this.serverUrl}/api/users/me/progress/${itemId}`, {
         method: 'PATCH',
         mode: 'cors',
@@ -155,14 +183,16 @@ export class ABSService {
           body: JSON.stringify(queue[id]),
         });
         delete queue[id];
-      } catch (e) {
-        break;
-      }
+      } catch (e) { break; }
     }
     localStorage.setItem(this.syncQueueKey, JSON.stringify(queue));
   }
 
   getCoverUrl(itemId: string): string {
     return `${this.serverUrl}/api/items/${itemId}/cover?token=${this.token}`;
+  }
+
+  disconnect() {
+    this.socket?.disconnect();
   }
 }
