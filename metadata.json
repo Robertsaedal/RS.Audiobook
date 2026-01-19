@@ -1,6 +1,6 @@
 
 {
-  "name": "R.S Audiobooks",
+  "name": "R.S Audiobook Player",
   "description": "Premium minimalist Audiobookshelf PWA with precision chapter controls and offline-ready sync.",
   "requestFramePermissions": [
     "microphone"

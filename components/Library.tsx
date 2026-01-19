@@ -2,7 +2,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { AuthState, ABSLibraryItem, ABSProgress } from '../types';
 import { ABSService } from '../services/absService';
-import { Home, Book, Layers, Search, LogOut, ChevronRight, Play, Clock } from 'lucide-react';
+import { Home, Layers, Search, LogOut, ChevronRight, Play, Clock, ArrowRight } from 'lucide-react';
 
 interface LibraryProps {
   auth: AuthState;
@@ -14,14 +14,16 @@ interface SeriesStack {
   name: string;
   items: ABSLibraryItem[];
   coverUrl: string;
+  totalCount: number;
 }
 
 const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
   const [items, setItems] = useState<ABSLibraryItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'HOME' | 'BOOKS' | 'SERIES'>('HOME');
+  const [activeTab, setActiveTab] = useState<'HOME' | 'SERIES'>('HOME');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSeries, setSelectedSeries] = useState<SeriesStack | null>(null);
+  const [viewingAll, setViewingAll] = useState(false);
   
   const absService = useMemo(() => new ABSService(auth.serverUrl, auth.user?.token || ''), [auth]);
 
@@ -51,11 +53,14 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
       .sort((a, b) => (b.userProgress?.lastUpdate || 0) - (a.userProgress?.lastUpdate || 0))[0];
   }, [items]);
 
-  const recentlyAdded = useMemo(() => {
+  // Fix: addedDate descending (newest first)
+  const sortedAllItems = useMemo(() => {
     return [...items].sort((a, b) => {
       return absService.normalizeDate(b.addedDate) - absService.normalizeDate(a.addedDate);
-    }).slice(0, 10);
+    });
   }, [items, absService]);
+
+  const recentlyAdded = useMemo(() => sortedAllItems.slice(0, 10), [sortedAllItems]);
 
   const seriesStacks = useMemo(() => {
     const groups: Record<string, ABSLibraryItem[]> = {};
@@ -74,18 +79,19 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
       return { 
         name, 
         items: sorted, 
-        coverUrl: absService.getCoverUrl(sorted[0].id) 
+        coverUrl: absService.getCoverUrl(sorted[0].id),
+        totalCount: sorted.length
       } as SeriesStack;
     }).sort((a, b) => a.name.localeCompare(b.name));
   }, [items, absService]);
 
-  const filteredBooks = useMemo(() => {
+  const filteredItems = useMemo(() => {
     const term = searchTerm.toLowerCase();
-    return items.filter(i => 
+    return sortedAllItems.filter(i => 
       i.media.metadata.title.toLowerCase().includes(term) || 
       i.media.metadata.authorName.toLowerCase().includes(term)
-    ).sort((a, b) => a.media.metadata.title.localeCompare(b.media.metadata.title));
-  }, [items, searchTerm]);
+    );
+  }, [sortedAllItems, searchTerm]);
 
   if (loading) return (
     <div className="flex-1 flex flex-col items-center justify-center bg-black h-[100dvh]">
@@ -99,10 +105,10 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
       <div className="px-6 pt-10 pb-4 space-y-6 shrink-0">
         <div className="flex justify-between items-center">
           <div>
-            <h2 className="text-4xl font-black tracking-tighter text-aether-purple drop-shadow-aether-glow">AETHER</h2>
-            <p className="text-[8px] uppercase tracking-[0.4em] text-neutral-700 font-black">Sync Protocol Active</p>
+            <h2 className="text-2xl font-black tracking-tighter text-aether-purple drop-shadow-aether-glow">R.S AUDIO</h2>
+            <p className="text-[8px] uppercase tracking-[0.4em] text-neutral-700 font-black">Spec V4.0</p>
           </div>
-          <button onClick={onLogout} className="bg-neutral-900/50 p-3 rounded-2xl border border-white/5 active:scale-90 transition-all text-neutral-500 hover:text-red-500">
+          <button onClick={onLogout} className="bg-neutral-900/50 p-3 rounded-2xl border border-white/5 active:scale-90 transition-all text-neutral-500">
             <LogOut size={18} />
           </button>
         </div>
@@ -113,7 +119,7 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
             placeholder="Search archive..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-neutral-900 border-none rounded-2xl py-5 pl-14 pr-6 text-xs text-white placeholder-neutral-800 transition-all focus:ring-1 focus:ring-aether-purple/40 outline-none"
+            className="w-full bg-neutral-900 border-none rounded-2xl py-4 pl-14 pr-6 text-xs text-white placeholder-neutral-800 transition-all focus:ring-1 focus:ring-aether-purple/40 outline-none"
           />
           <Search className="w-5 h-5 text-neutral-800 absolute left-5 top-1/2 -translate-y-1/2 group-focus-within:text-aether-purple transition-colors" />
         </div>
@@ -121,18 +127,17 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
 
       <nav className="flex px-6 gap-8 shrink-0 border-b border-white/5 bg-black/50 backdrop-blur-md">
         {[
-          { id: 'HOME', icon: Home, label: 'Home' },
-          { id: 'BOOKS', icon: Book, label: 'Books' },
+          { id: 'HOME', icon: Home, label: 'Explore' },
           { id: 'SERIES', icon: Layers, label: 'Series' }
         ].map(tab => (
           <button 
             key={tab.id}
-            onClick={() => { setActiveTab(tab.id as any); setSelectedSeries(null); }}
-            className={`flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.2em] transition-all relative py-5 ${activeTab === tab.id && !selectedSeries ? 'text-white' : 'text-neutral-700'}`}
+            onClick={() => { setActiveTab(tab.id as any); setSelectedSeries(null); setViewingAll(false); }}
+            className={`flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.2em] transition-all relative py-5 ${activeTab === tab.id && !selectedSeries && !viewingAll ? 'text-white' : 'text-neutral-700'}`}
           >
             <tab.icon size={14} className={activeTab === tab.id ? 'text-aether-purple' : ''} />
             <span className="hidden sm:inline">{tab.label}</span>
-            {activeTab === tab.id && !selectedSeries && <div className="absolute bottom-[-1px] left-0 w-full h-1 gradient-aether shadow-aether-glow" />}
+            {activeTab === tab.id && !selectedSeries && !viewingAll && <div className="absolute bottom-[-1px] left-0 w-full h-1 gradient-aether shadow-aether-glow" />}
           </button>
         ))}
       </nav>
@@ -148,10 +153,26 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
               </button>
               <div className="space-y-2">
                 <h3 className="text-3xl font-black uppercase tracking-tighter text-white">{selectedSeries.name}</h3>
-                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-neutral-700">{selectedSeries.items.length} Volume Collection</p>
+                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-neutral-700">{selectedSeries.totalCount} VOLUME COLLECTION</p>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-8">
                 {selectedSeries.items.map(item => (
+                  <BookCard key={item.id} item={item} onClick={() => onSelectItem(item)} coverUrl={absService.getCoverUrl(item.id)} />
+                ))}
+              </div>
+            </div>
+          ) : viewingAll ? (
+            <div className="space-y-10 animate-slide-up">
+              <button onClick={() => setViewingAll(false)} className="flex items-center gap-2 text-aether-purple text-[10px] font-black uppercase tracking-widest bg-neutral-900/40 px-5 py-2.5 rounded-full border border-white/5">
+                <ChevronRight className="rotate-180" size={14} />
+                Back to Dashboard
+              </button>
+              <div className="space-y-2">
+                <h3 className="text-3xl font-black uppercase tracking-tighter text-white">Archives</h3>
+                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-neutral-700">Total Library Sync: {items.length} titles</p>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-x-6 gap-y-12">
+                {filteredItems.map(item => (
                   <BookCard key={item.id} item={item} onClick={() => onSelectItem(item)} coverUrl={absService.getCoverUrl(item.id)} />
                 ))}
               </div>
@@ -176,19 +197,25 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
                         <div className="absolute inset-0 h-full gradient-aether shadow-aether-glow transition-all duration-1000" style={{ width: `${(resumeHero.userProgress?.progress || 0) * 100}%` }} />
                       </div>
                     </div>
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 rounded-full bg-white/10 backdrop-blur-lg border border-white/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Play className="text-white fill-current" size={24} />
-                    </div>
                   </div>
                 ) : (
                   <div className="bg-neutral-900/20 rounded-[40px] p-20 text-center border border-dashed border-white/5">
-                    <p className="text-[10px] font-black uppercase tracking-[0.4em] text-neutral-800">Archive selection required</p>
+                    <p className="text-[10px] font-black uppercase tracking-[0.4em] text-neutral-800">No active sessions</p>
                   </div>
                 )}
               </section>
 
               <section className="space-y-8">
-                <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-neutral-800">Recently Discovered</h3>
+                <button 
+                  onClick={() => setViewingAll(true)}
+                  className="w-full flex items-center justify-between group"
+                >
+                  <div className="flex items-center gap-2 text-neutral-800 group-hover:text-aether-purple transition-colors">
+                    <h3 className="text-[10px] font-black uppercase tracking-[0.4em]">Recently Added</h3>
+                    <ArrowRight size={14} className="opacity-0 group-hover:opacity-100 -translate-x-2 group-hover:translate-x-0 transition-all" />
+                  </div>
+                  <span className="text-[10px] font-black text-neutral-700 group-hover:text-white uppercase tracking-widest transition-colors">View All</span>
+                </button>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-x-6 gap-y-10">
                   {recentlyAdded.map(item => (
                     <BookCard key={item.id} item={item} onClick={() => onSelectItem(item)} coverUrl={absService.getCoverUrl(item.id)} />
@@ -196,26 +223,21 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
                 </div>
               </section>
             </div>
-          ) : activeTab === 'BOOKS' ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-x-6 gap-y-12">
-              {filteredBooks.map(item => (
-                <BookCard key={item.id} item={item} onClick={() => onSelectItem(item)} coverUrl={absService.getCoverUrl(item.id)} />
-              ))}
-            </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-8 gap-y-16">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-10 gap-y-16">
               {seriesStacks.map(stack => (
-                <div key={stack.name} onClick={() => setSelectedSeries(stack)} className="relative cursor-pointer group active:scale-95 transition-all">
-                  <div className="absolute inset-0 bg-neutral-800/40 rounded-[36px] translate-x-3 -translate-y-3 border border-white/5 z-0 transition-transform group-hover:translate-x-4 group-hover:-translate-y-4" />
-                  <div className="absolute inset-0 bg-neutral-900/60 rounded-[36px] translate-x-1.5 -translate-y-1.5 border border-white/5 z-10 transition-transform group-hover:translate-x-2 group-hover:-translate-y-2" />
+                <div key={stack.name} onClick={() => setSelectedSeries(stack)} className="relative cursor-pointer group active:scale-95 transition-all pt-6">
+                  {/* Official-style 3D stack effect */}
+                  <div className="absolute inset-0 bg-neutral-800/40 rounded-[32px] -translate-y-4 scale-90 border border-white/5 z-0" />
+                  <div className="absolute inset-0 bg-neutral-900/60 rounded-[32px] -translate-y-2 scale-95 border border-white/5 z-10" />
                   
-                  <div className="relative aspect-square bg-neutral-950 rounded-[36px] overflow-hidden border border-white/10 shadow-2xl group-hover:border-aether-purple/50 z-20 transition-all">
+                  <div className="relative aspect-square bg-neutral-950 rounded-[32px] overflow-hidden border border-white/10 shadow-2xl group-hover:border-aether-purple/50 z-20 transition-all">
                     <img src={stack.coverUrl} className="w-full h-full object-cover group-hover:scale-105 transition-transform" alt="" loading="lazy" />
                     <div className="absolute bottom-4 right-4 bg-black/80 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 shadow-xl">
-                      <span className="text-[10px] font-black text-white uppercase tracking-tighter">{stack.items.length} PCS</span>
+                      <span className="text-[10px] font-black text-white uppercase tracking-tighter">{stack.totalCount} BOOKS</span>
                     </div>
                   </div>
-                  <h3 className="text-center mt-6 text-[12px] font-black uppercase tracking-tight text-white group-hover:text-aether-purple transition-colors truncate px-2">{stack.name}</h3>
+                  <h3 className="text-center mt-6 text-[11px] font-black uppercase tracking-tight text-white group-hover:text-aether-purple transition-colors truncate px-2">{stack.name}</h3>
                 </div>
               ))}
             </div>
@@ -231,7 +253,7 @@ const BookCard = ({ item, onClick, coverUrl }: { item: ABSLibraryItem, onClick: 
   const progress = (item.userProgress?.progress || 0) * 100;
   return (
     <button onClick={onClick} className="flex flex-col text-left group transition-all active:scale-95 w-full">
-      <div className="aspect-square w-full bg-neutral-900 rounded-[36px] overflow-hidden mb-4 relative shadow-2xl border border-white/5 group-hover:border-aether-purple/40 transition-all">
+      <div className="aspect-square w-full bg-neutral-900 rounded-[32px] overflow-hidden mb-4 relative shadow-2xl border border-white/5 group-hover:border-aether-purple/40 transition-all">
         <img src={coverUrl} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-1000" alt="" loading="lazy" />
         {progress > 0 && !isFinished && (
           <div className="absolute bottom-0 left-0 w-full h-1.5 bg-black/60">
@@ -239,12 +261,12 @@ const BookCard = ({ item, onClick, coverUrl }: { item: ABSLibraryItem, onClick: 
           </div>
         )}
         {isFinished && (
-          <div className="absolute top-3 right-3 bg-green-500 w-7 h-7 rounded-full flex items-center justify-center border-2 border-black/30 shadow-2xl z-10">
-            <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={5} d="M5 13l4 4L19 7"/></svg>
+          <div className="absolute top-3 right-3 bg-green-500 w-6 h-6 rounded-full flex items-center justify-center border-2 border-black/30 shadow-2xl z-10">
+            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={5} d="M5 13l4 4L19 7"/></svg>
           </div>
         )}
       </div>
-      <h3 className="text-[11px] font-black line-clamp-1 text-white/90 uppercase tracking-tight mb-1">{item.media.metadata.title}</h3>
+      <h3 className="text-[10px] font-black line-clamp-1 text-white/90 uppercase tracking-tight mb-0.5">{item.media.metadata.title}</h3>
       <p className="text-[9px] font-black uppercase tracking-[0.2em] text-neutral-700 truncate">{item.media.metadata.authorName}</p>
     </button>
   );
