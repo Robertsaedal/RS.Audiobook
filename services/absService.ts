@@ -53,7 +53,6 @@ export class ABSService {
       const response = await fetch(`${baseUrl}/login`, {
         method: 'POST',
         mode: 'cors',
-        credentials: 'include',
         headers: { 
           'Content-Type': 'application/json'
         },
@@ -79,7 +78,7 @@ export class ABSService {
       const response = await fetch(url, {
         ...options,
         mode: 'cors',
-        credentials: 'include',
+        cache: 'no-store', // Prevent stale heavy data
         headers: {
           'Authorization': `Bearer ${this.token}`,
           'Content-Type': 'application/json',
@@ -144,7 +143,6 @@ export class ABSService {
       await fetch(`${this.serverUrl}/api/users/me/progress/${itemId}`, {
         method: 'PATCH',
         mode: 'cors',
-        credentials: 'include',
         headers: {
           'Authorization': `Bearer ${this.token}`,
           'Content-Type': 'application/json',

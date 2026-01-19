@@ -48,16 +48,11 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
     return () => absService.disconnect();
   }, [absService]);
 
-  const resumeHero = useMemo(() => {
-    return items
-      .filter(i => i.userProgress && !i.userProgress.isFinished && i.userProgress.progress > 0)
-      .sort((a, b) => (b.userProgress?.lastUpdate || 0) - (a.userProgress?.lastUpdate || 0))[0];
-  }, [items]);
-
-  // Fix: addedDate descending (newest first)
   const sortedAllItems = useMemo(() => {
     return [...items].sort((a, b) => {
-      return absService.normalizeDate(b.addedDate) - absService.normalizeDate(a.addedDate);
+      const dateA = absService.normalizeDate(a.addedDate);
+      const dateB = absService.normalizeDate(b.addedDate);
+      return dateB - dateA; // Newest first
     });
   }, [items, absService]);
 
@@ -101,7 +96,7 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
   if (loading) return (
     <div className="flex-1 flex flex-col items-center justify-center bg-black h-[100dvh]">
       <div className="w-12 h-12 border-4 border-aether-purple/20 border-t-aether-purple rounded-full animate-spin mb-6" />
-      <h2 className="text-[10px] font-black uppercase tracking-[0.5em] text-neutral-800 animate-pulse">Establishing Connection</h2>
+      <h2 className="text-[10px] font-black uppercase tracking-[0.5em] text-neutral-800 animate-pulse">Syncing Archive</h2>
     </div>
   );
 
@@ -178,36 +173,6 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
             </div>
           ) : activeTab === 'HOME' ? (
             <div className="space-y-16">
-              <section className="space-y-6">
-                <div className="flex items-center gap-2 text-neutral-800">
-                  <Play size={12} />
-                  <h3 className="text-[10px] font-black uppercase tracking-[0.4em]">Currently Resuming</h3>
-                </div>
-                {resumeHero ? (
-                  <div className="md:flex justify-center">
-                    <div 
-                      onClick={() => onSelectItem(resumeHero)}
-                      className="relative group w-full md:max-w-4xl aspect-[21/9] bg-neutral-950 rounded-[40px] overflow-hidden border border-white/5 cursor-pointer shadow-2xl active:scale-[0.98] transition-all"
-                    >
-                      <img src={absService.getCoverUrl(resumeHero.id)} className="w-full h-full object-cover opacity-50 group-hover:scale-110 transition-transform duration-[4s]" alt="" />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent p-8 md:p-12 flex flex-col justify-end">
-                        <h4 className="text-3xl md:text-5xl font-black uppercase tracking-tighter text-white mb-1 truncate leading-none">{resumeHero.media.metadata.title}</h4>
-                        <p className="text-[10px] md:text-xs font-black text-aether-purple uppercase tracking-[0.2em] mb-6">
-                          {resumeHero.media.metadata.seriesName ? `${resumeHero.media.metadata.seriesName} #${resumeHero.media.metadata.sequence}` : resumeHero.media.metadata.authorName}
-                        </p>
-                        <div className="w-full h-2 bg-white/5 rounded-full overflow-hidden border border-white/5 relative">
-                          <div className="absolute inset-0 h-full gradient-aether shadow-aether-glow transition-all duration-1000" style={{ width: `${(resumeHero.userProgress?.progress || 0) * 100}%` }} />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="bg-neutral-900/10 rounded-[40px] p-20 text-center border border-dashed border-white/5">
-                    <p className="text-[10px] font-black uppercase tracking-[0.4em] text-neutral-800">No active sessions found</p>
-                  </div>
-                )}
-              </section>
-
               <section className="space-y-8">
                 <button 
                   onClick={() => setViewingAll(true)}
@@ -236,20 +201,15 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
           ) : (
             <div className="space-y-10">
               <div className="space-y-2">
-                <h3 className="text-3xl font-black uppercase tracking-tighter text-white">Series Stacks</h3>
-                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-neutral-700">Chronological Collections</p>
+                <h3 className="text-3xl font-black uppercase tracking-tighter text-white">Series Archives</h3>
+                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-neutral-700">Multi-Volume Collections</p>
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-x-10 gap-y-16">
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-x-12 gap-y-16">
                 {seriesStacks.map(stack => (
                   <div key={stack.name} onClick={() => setSelectedSeries(stack)} className="relative cursor-pointer group active:scale-95 transition-all pt-6">
-                    {/* Visual Stack Effect */}
-                    <div className="absolute inset-x-4 inset-y-0 bg-neutral-800/40 rounded-[32px] -translate-y-4 scale-90 border border-white/5 z-0" />
-                    <div className="absolute inset-x-2 inset-y-0 bg-neutral-900/60 rounded-[32px] -translate-y-2 scale-95 border border-white/5 z-10" />
-                    <div className="relative aspect-[2/3] bg-neutral-950 rounded-[32px] overflow-hidden border border-white/10 shadow-2xl group-hover:border-aether-purple/50 z-20 transition-all">
-                      <img src={stack.coverUrl} className="w-full h-full object-cover group-hover:scale-105 transition-transform" alt="" loading="lazy" />
-                      <div className="absolute bottom-4 right-4 bg-black/80 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 shadow-xl">
-                        <span className="text-[10px] font-black text-white uppercase tracking-tighter">{stack.totalCount} TITLES</span>
-                      </div>
+                    <div className="series-cover-container">
+                      <img src={stack.coverUrl} loading="lazy" alt="" />
+                      <div className="series-badge">{stack.totalCount} VOLS</div>
                     </div>
                     <h3 className="text-center mt-6 text-[11px] font-black uppercase tracking-tight text-white group-hover:text-aether-purple transition-colors truncate px-2">{stack.name}</h3>
                   </div>
@@ -270,15 +230,15 @@ const BookCard = ({ item, onClick, coverUrl, totalInSeries }: { item: ABSLibrary
 
   return (
     <button onClick={onClick} className="flex flex-col text-left group transition-all active:scale-95 w-full">
-      <div className="aspect-[2/3] w-full bg-neutral-900 rounded-[32px] overflow-hidden mb-4 relative shadow-2xl border border-white/5 group-hover:border-aether-purple/40 transition-all">
-        <img src={coverUrl} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-1000" alt="" loading="lazy" />
+      <div className={`w-full mb-4 relative ${seriesName ? 'series-cover-container' : 'aspect-[2/3] bg-neutral-900 rounded-[24px] overflow-hidden border border-white/5'}`}>
+        <img src={coverUrl} loading="lazy" className={`${seriesName ? '' : 'w-full h-full object-cover rounded-[24px]'} group-hover:scale-105 transition-transform duration-700`} alt="" />
         {progress > 0 && !isFinished && (
-          <div className="absolute bottom-0 left-0 w-full h-1.5 bg-black/60">
+          <div className="absolute bottom-0 left-0 w-full h-1.5 bg-black/60 z-20">
             <div className="h-full gradient-aether shadow-aether-glow" style={{ width: `${progress}%` }} />
           </div>
         )}
         {isFinished && (
-          <div className="absolute top-3 right-3 bg-green-500 w-6 h-6 rounded-full flex items-center justify-center border-2 border-black/30 shadow-2xl z-10">
+          <div className="absolute top-3 right-3 bg-green-500 w-6 h-6 rounded-full flex items-center justify-center border-2 border-black/30 shadow-2xl z-30">
             <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={5} d="M5 13l4 4L19 7"/></svg>
           </div>
         )}

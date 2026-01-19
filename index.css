@@ -50,6 +50,35 @@
     overflow-y: auto;
     overscroll-behavior-y: auto;
   }
+
+  /* Official ABS Series Stacking Effect */
+  .series-cover-container {
+    @apply relative w-full aspect-[2/3];
+  }
+
+  .series-cover-container::before,
+  .series-cover-container::after {
+    content: '';
+    @apply absolute inset-0 bg-neutral-800 rounded-[24px] border border-white/10 z-0 shadow-xl;
+    transition: transform 0.4s ease;
+  }
+
+  .series-cover-container::before {
+    transform: rotate(-3deg) translate(-6px, -2px);
+  }
+
+  .series-cover-container::after {
+    transform: rotate(2deg) translate(4px, 1px);
+    @apply bg-neutral-900;
+  }
+
+  .series-cover-container img {
+    @apply relative z-10 w-full h-full object-cover rounded-[24px] shadow-2xl;
+  }
+
+  .series-badge {
+    @apply absolute bottom-3 right-3 z-20 bg-black/80 backdrop-blur-md px-2 py-1 rounded-lg border border-white/10 text-[8px] font-black text-white uppercase tracking-tighter;
+  }
 }
 
 ::-webkit-scrollbar {
