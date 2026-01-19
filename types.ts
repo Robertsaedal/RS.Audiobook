@@ -40,13 +40,6 @@ export interface ABSLibraryItem {
   userProgress?: ABSProgress;
 }
 
-export interface ABSSeries {
-  id: string;
-  name: string;
-  libraryItemIds: string[];
-  items?: ABSLibraryItem[];
-}
-
 export interface ABSProgress {
   itemId: string;
   currentTime: number;
@@ -56,15 +49,12 @@ export interface ABSProgress {
   lastUpdate: number;
 }
 
+/**
+ * Interface representing a playback session in Audiobookshelf.
+ * Required by Player.tsx for managing the streaming session state.
+ */
 export interface ABSPlaybackSession {
   id: string;
-  userId: string;
-  libraryItemId: string;
-  displayTitle: string;
-  displayAuthor: string;
-  duration: number;
-  playMethod: number; // 0=Direct, 1=HLS
-  mediaMetadata: any;
 }
 
 export interface AuthState {
