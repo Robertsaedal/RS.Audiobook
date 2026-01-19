@@ -2,7 +2,8 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { AuthState, ABSLibraryItem, ABSProgress } from '../types';
 import { ABSService } from '../services/absService';
-import { Home, Layers, Search, LogOut, ChevronRight, Play, Clock, ArrowRight } from 'lucide-react';
+import Navigation, { NavTab } from './Navigation';
+import { Search, ChevronRight, Clock, ArrowRight } from 'lucide-react';
 
 interface LibraryProps {
   auth: AuthState;
@@ -20,10 +21,9 @@ interface SeriesStack {
 const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
   const [items, setItems] = useState<ABSLibraryItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'HOME' | 'SERIES'>('HOME');
+  const [activeTab, setActiveTab] = useState<NavTab>('HOME');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSeries, setSelectedSeries] = useState<SeriesStack | null>(null);
-  const [viewingAll, setViewingAll] = useState(false);
   
   const absService = useMemo(() => new ABSService(auth.serverUrl, auth.user?.token || ''), [auth]);
 
@@ -53,7 +53,6 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
       .sort((a, b) => (b.userProgress?.lastUpdate || 0) - (a.userProgress?.lastUpdate || 0))[0];
   }, [items]);
 
-  // Fix: addedDate descending (newest first)
   const sortedAllItems = useMemo(() => {
     return [...items].sort((a, b) => {
       return absService.normalizeDate(b.addedDate) - absService.normalizeDate(a.addedDate);
@@ -101,50 +100,33 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
   );
 
   return (
-    <div className="flex-1 flex flex-col safe-top overflow-hidden bg-black h-[100dvh]">
-      <div className="px-6 pt-10 pb-4 space-y-6 shrink-0">
-        <div className="flex justify-between items-center">
-          <div>
+    <div className="flex-1 flex flex-col bg-black min-h-[100dvh]">
+      <Navigation 
+        activeTab={activeTab} 
+        onTabChange={(tab) => { setActiveTab(tab); setSelectedSeries(null); }} 
+        onLogout={onLogout} 
+      />
+
+      <main className="flex-1 md:ml-64 pb-24 md:pb-8 safe-top overflow-x-hidden">
+        {/* Header - Sticky on Mobile */}
+        <div className="px-6 pt-10 pb-4 space-y-6 shrink-0 md:px-12">
+          <div className="md:hidden flex justify-between items-center mb-8">
             <h2 className="text-2xl font-black tracking-tighter text-aether-purple drop-shadow-aether-glow">R.S AUDIO</h2>
-            <p className="text-[8px] uppercase tracking-[0.4em] text-neutral-700 font-black">Spec V4.0</p>
           </div>
-          <button onClick={onLogout} className="bg-neutral-900/50 p-3 rounded-2xl border border-white/5 active:scale-90 transition-all text-neutral-500">
-            <LogOut size={18} />
-          </button>
+
+          <div className="relative group max-w-2xl">
+            <input
+              type="text"
+              placeholder="Search archive..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full bg-neutral-900 border-none rounded-3xl py-4 pl-14 pr-6 text-sm text-white placeholder-neutral-800 transition-all focus:ring-1 focus:ring-aether-purple/40 outline-none"
+            />
+            <Search className="w-5 h-5 text-neutral-800 absolute left-5 top-1/2 -translate-y-1/2 group-focus-within:text-aether-purple transition-colors" />
+          </div>
         </div>
 
-        <div className="relative group">
-          <input
-            type="text"
-            placeholder="Search archive..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-neutral-900 border-none rounded-2xl py-4 pl-14 pr-6 text-xs text-white placeholder-neutral-800 transition-all focus:ring-1 focus:ring-aether-purple/40 outline-none"
-          />
-          <Search className="w-5 h-5 text-neutral-800 absolute left-5 top-1/2 -translate-y-1/2 group-focus-within:text-aether-purple transition-colors" />
-        </div>
-      </div>
-
-      <nav className="flex px-6 gap-8 shrink-0 border-b border-white/5 bg-black/50 backdrop-blur-md">
-        {[
-          { id: 'HOME', icon: Home, label: 'Explore' },
-          { id: 'SERIES', icon: Layers, label: 'Series' }
-        ].map(tab => (
-          <button 
-            key={tab.id}
-            onClick={() => { setActiveTab(tab.id as any); setSelectedSeries(null); setViewingAll(false); }}
-            className={`flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.2em] transition-all relative py-5 ${activeTab === tab.id && !selectedSeries && !viewingAll ? 'text-white' : 'text-neutral-700'}`}
-          >
-            <tab.icon size={14} className={activeTab === tab.id ? 'text-aether-purple' : ''} />
-            <span className="hidden sm:inline">{tab.label}</span>
-            {activeTab === tab.id && !selectedSeries && !viewingAll && <div className="absolute bottom-[-1px] left-0 w-full h-1 gradient-aether shadow-aether-glow" />}
-          </button>
-        ))}
-      </nav>
-
-      <div className="flex-1 overflow-y-auto px-6 py-8 no-scrollbar scroll-container pb-32 touch-pan-y">
-        <div className="animate-fade-in">
-          
+        <div className="px-6 py-8 md:px-12 animate-fade-in max-w-[1600px] mx-auto">
           {selectedSeries ? (
             <div className="space-y-10 animate-slide-up">
               <button onClick={() => setSelectedSeries(null)} className="flex items-center gap-2 text-aether-purple text-[10px] font-black uppercase tracking-widest bg-neutral-900/40 px-5 py-2.5 rounded-full border border-white/5">
@@ -155,24 +137,8 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
                 <h3 className="text-3xl font-black uppercase tracking-tighter text-white">{selectedSeries.name}</h3>
                 <p className="text-[10px] font-black uppercase tracking-[0.3em] text-neutral-700">{selectedSeries.totalCount} VOLUME COLLECTION</p>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-8">
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-x-6 gap-y-12">
                 {selectedSeries.items.map(item => (
-                  <BookCard key={item.id} item={item} onClick={() => onSelectItem(item)} coverUrl={absService.getCoverUrl(item.id)} />
-                ))}
-              </div>
-            </div>
-          ) : viewingAll ? (
-            <div className="space-y-10 animate-slide-up">
-              <button onClick={() => setViewingAll(false)} className="flex items-center gap-2 text-aether-purple text-[10px] font-black uppercase tracking-widest bg-neutral-900/40 px-5 py-2.5 rounded-full border border-white/5">
-                <ChevronRight className="rotate-180" size={14} />
-                Back to Dashboard
-              </button>
-              <div className="space-y-2">
-                <h3 className="text-3xl font-black uppercase tracking-tighter text-white">Archives</h3>
-                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-neutral-700">Total Library Sync: {items.length} titles</p>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-x-6 gap-y-12">
-                {filteredItems.map(item => (
                   <BookCard key={item.id} item={item} onClick={() => onSelectItem(item)} coverUrl={absService.getCoverUrl(item.id)} />
                 ))}
               </div>
@@ -185,16 +151,18 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
                   <h3 className="text-[10px] font-black uppercase tracking-[0.4em]">Currently Resuming</h3>
                 </div>
                 {resumeHero ? (
-                  <div 
-                    onClick={() => onSelectItem(resumeHero)}
-                    className="relative group w-full aspect-[16/9] bg-neutral-950 rounded-[40px] overflow-hidden border border-white/5 cursor-pointer shadow-2xl active:scale-[0.98] transition-all"
-                  >
-                    <img src={absService.getCoverUrl(resumeHero.id)} className="w-full h-full object-cover opacity-50 group-hover:scale-110 transition-transform duration-[4s]" alt="" />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent p-8 flex flex-col justify-end">
-                      <h4 className="text-3xl font-black uppercase tracking-tighter text-white mb-1 truncate leading-none">{resumeHero.media.metadata.title}</h4>
-                      <p className="text-[10px] font-black text-aether-purple uppercase tracking-[0.2em] mb-6">{resumeHero.media.metadata.authorName}</p>
-                      <div className="w-full h-2 bg-white/5 rounded-full overflow-hidden border border-white/5 relative">
-                        <div className="absolute inset-0 h-full gradient-aether shadow-aether-glow transition-all duration-1000" style={{ width: `${(resumeHero.userProgress?.progress || 0) * 100}%` }} />
+                  <div className="md:flex justify-center">
+                    <div 
+                      onClick={() => onSelectItem(resumeHero)}
+                      className="relative group w-full md:max-w-4xl aspect-[21/9] bg-neutral-950 rounded-[40px] overflow-hidden border border-white/5 cursor-pointer shadow-2xl active:scale-[0.98] transition-all"
+                    >
+                      <img src={absService.getCoverUrl(resumeHero.id)} className="w-full h-full object-cover opacity-50 group-hover:scale-110 transition-transform duration-[4s]" alt="" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent p-8 md:p-12 flex flex-col justify-end">
+                        <h4 className="text-3xl md:text-5xl font-black uppercase tracking-tighter text-white mb-1 truncate leading-none">{resumeHero.media.metadata.title}</h4>
+                        <p className="text-[10px] md:text-xs font-black text-aether-purple uppercase tracking-[0.2em] mb-6">{resumeHero.media.metadata.authorName}</p>
+                        <div className="w-full h-2 bg-white/5 rounded-full overflow-hidden border border-white/5 relative">
+                          <div className="absolute inset-0 h-full gradient-aether shadow-aether-glow transition-all duration-1000" style={{ width: `${(resumeHero.userProgress?.progress || 0) * 100}%` }} />
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -206,44 +174,55 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
               </section>
 
               <section className="space-y-8">
-                <button 
-                  onClick={() => setViewingAll(true)}
-                  className="w-full flex items-center justify-between group"
-                >
-                  <div className="flex items-center gap-2 text-neutral-800 group-hover:text-aether-purple transition-colors">
+                <div className="flex items-center justify-between group">
+                  <div className="flex items-center gap-2 text-neutral-800">
                     <h3 className="text-[10px] font-black uppercase tracking-[0.4em]">Recently Added</h3>
-                    <ArrowRight size={14} className="opacity-0 group-hover:opacity-100 -translate-x-2 group-hover:translate-x-0 transition-all" />
                   </div>
-                  <span className="text-[10px] font-black text-neutral-700 group-hover:text-white uppercase tracking-widest transition-colors">View All</span>
-                </button>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-x-6 gap-y-10">
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-x-6 gap-y-12">
                   {recentlyAdded.map(item => (
                     <BookCard key={item.id} item={item} onClick={() => onSelectItem(item)} coverUrl={absService.getCoverUrl(item.id)} />
                   ))}
                 </div>
               </section>
             </div>
+          ) : activeTab === 'BOOKS' ? (
+            <div className="space-y-10">
+              <div className="space-y-2">
+                <h3 className="text-3xl font-black uppercase tracking-tighter text-white">Archive Collection</h3>
+                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-neutral-700">{items.length} TITLES TOTAL</p>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-x-6 gap-y-12">
+                {filteredItems.map(item => (
+                  <BookCard key={item.id} item={item} onClick={() => onSelectItem(item)} coverUrl={absService.getCoverUrl(item.id)} />
+                ))}
+              </div>
+            </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-10 gap-y-16">
-              {seriesStacks.map(stack => (
-                <div key={stack.name} onClick={() => setSelectedSeries(stack)} className="relative cursor-pointer group active:scale-95 transition-all pt-6">
-                  {/* Official-style 3D stack effect */}
-                  <div className="absolute inset-0 bg-neutral-800/40 rounded-[32px] -translate-y-4 scale-90 border border-white/5 z-0" />
-                  <div className="absolute inset-0 bg-neutral-900/60 rounded-[32px] -translate-y-2 scale-95 border border-white/5 z-10" />
-                  
-                  <div className="relative aspect-square bg-neutral-950 rounded-[32px] overflow-hidden border border-white/10 shadow-2xl group-hover:border-aether-purple/50 z-20 transition-all">
-                    <img src={stack.coverUrl} className="w-full h-full object-cover group-hover:scale-105 transition-transform" alt="" loading="lazy" />
-                    <div className="absolute bottom-4 right-4 bg-black/80 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 shadow-xl">
-                      <span className="text-[10px] font-black text-white uppercase tracking-tighter">{stack.totalCount} BOOKS</span>
+            <div className="space-y-10">
+              <div className="space-y-2">
+                <h3 className="text-3xl font-black uppercase tracking-tighter text-white">Series Stacks</h3>
+                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-neutral-700">Multi-volume entries</p>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-x-10 gap-y-16">
+                {seriesStacks.map(stack => (
+                  <div key={stack.name} onClick={() => setSelectedSeries(stack)} className="relative cursor-pointer group active:scale-95 transition-all pt-6">
+                    <div className="absolute inset-0 bg-neutral-800/40 rounded-[32px] -translate-y-4 scale-90 border border-white/5 z-0" />
+                    <div className="absolute inset-0 bg-neutral-900/60 rounded-[32px] -translate-y-2 scale-95 border border-white/5 z-10" />
+                    <div className="relative aspect-square bg-neutral-950 rounded-[32px] overflow-hidden border border-white/10 shadow-2xl group-hover:border-aether-purple/50 z-20 transition-all">
+                      <img src={stack.coverUrl} className="w-full h-full object-cover group-hover:scale-105 transition-transform" alt="" loading="lazy" />
+                      <div className="absolute bottom-4 right-4 bg-black/80 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 shadow-xl">
+                        <span className="text-[10px] font-black text-white uppercase tracking-tighter">{stack.totalCount} BOOKS</span>
+                      </div>
                     </div>
+                    <h3 className="text-center mt-6 text-[11px] font-black uppercase tracking-tight text-white group-hover:text-aether-purple transition-colors truncate px-2">{stack.name}</h3>
                   </div>
-                  <h3 className="text-center mt-6 text-[11px] font-black uppercase tracking-tight text-white group-hover:text-aether-purple transition-colors truncate px-2">{stack.name}</h3>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           )}
         </div>
-      </div>
+      </main>
     </div>
   );
 };
@@ -253,7 +232,7 @@ const BookCard = ({ item, onClick, coverUrl }: { item: ABSLibraryItem, onClick: 
   const progress = (item.userProgress?.progress || 0) * 100;
   return (
     <button onClick={onClick} className="flex flex-col text-left group transition-all active:scale-95 w-full">
-      <div className="aspect-square w-full bg-neutral-900 rounded-[32px] overflow-hidden mb-4 relative shadow-2xl border border-white/5 group-hover:border-aether-purple/40 transition-all">
+      <div className="aspect-[2/3] w-full bg-neutral-900 rounded-3xl overflow-hidden mb-4 relative shadow-2xl border border-white/5 group-hover:border-aether-purple/40 transition-all">
         <img src={coverUrl} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-1000" alt="" loading="lazy" />
         {progress > 0 && !isFinished && (
           <div className="absolute bottom-0 left-0 w-full h-1.5 bg-black/60">
