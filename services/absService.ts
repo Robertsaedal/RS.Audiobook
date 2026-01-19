@@ -9,20 +9,31 @@ export class ABSService {
   private socket: Socket | null = null;
 
   constructor(serverUrl: string, token: string) {
-    let cleanUrl = serverUrl.trim().replace(/\/+$/, '').replace(/\/api$/, '');
-    if (cleanUrl && !cleanUrl.startsWith('http')) {
-      cleanUrl = `https://${cleanUrl}`;
-    }
-    this.serverUrl = cleanUrl;
+    this.serverUrl = ABSService.normalizeUrl(serverUrl);
     this.token = token;
     this.initSocket();
+  }
+
+  private static normalizeUrl(url: string): string {
+    let clean = url.trim().replace(/\/+$/, '');
+    // Remove /api if user included it, but keep the base
+    clean = clean.replace(/\/api$/, '');
+    
+    if (clean && !clean.startsWith('http')) {
+      // If we are on a secure page, we must use https for the API
+      const protocol = window.location.protocol === 'https:' ? 'https://' : 'http://';
+      clean = `${protocol}${clean}`;
+    }
+    return clean;
   }
 
   private initSocket() {
     this.socket = io(this.serverUrl, {
       auth: { token: this.token },
+      path: '/socket.io',
       transports: ['websocket'],
       autoConnect: true,
+      reconnection: true,
     });
   }
 
@@ -38,33 +49,50 @@ export class ABSService {
   }
 
   static async login(serverUrl: string, username: string, password: string): Promise<any> {
-    let baseUrl = serverUrl.trim().replace(/\/+$/, '').replace(/\/api$/, '');
-    if (baseUrl && !baseUrl.startsWith('http')) baseUrl = `https://${baseUrl}`;
+    const baseUrl = this.normalizeUrl(serverUrl);
 
-    const response = await fetch(`${baseUrl}/login`, {
-      method: 'POST',
-      mode: 'cors',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: username.trim(), password }),
-    });
+    try {
+      const response = await fetch(`${baseUrl}/login`, {
+        method: 'POST',
+        mode: 'cors',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({ username: username.trim(), password }),
+      });
 
-    if (!response.ok) throw new Error(`Login failed: ${await response.text()}`);
-    return response.json();
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || `Login failed: ${response.status}`);
+      }
+      return response.json();
+    } catch (err: any) {
+      if (err.name === 'TypeError' && err.message === 'Failed to fetch') {
+        throw new Error('CORS_ERROR');
+      }
+      throw err;
+    }
   }
 
   private async fetchApi(endpoint: string, options: RequestInit = {}) {
     const url = `${this.serverUrl}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
-    const response = await fetch(url, {
-      ...options,
-      mode: 'cors',
-      headers: {
-        'Authorization': `Bearer ${this.token}`,
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
-    });
-    if (!response.ok) return null;
-    return response.json();
+    try {
+      const response = await fetch(url, {
+        ...options,
+        mode: 'cors',
+        headers: {
+          'Authorization': `Bearer ${this.token}`,
+          'Content-Type': 'application/json',
+          ...options.headers,
+        },
+      });
+      if (!response.ok) return null;
+      return response.json();
+    } catch (e) {
+      console.error(`API Fetch Error: ${endpoint}`, e);
+      return null;
+    }
   }
 
   normalizeDate(date: string | number | undefined): number {
@@ -93,7 +121,6 @@ export class ABSService {
 
   async getLibraryItems(): Promise<ABSLibraryItem[]> {
     const libId = await this.ensureLibraryId();
-    // Use official include=progress to get accurate local progress state
     const data = await this.fetchApi(`/api/libraries/${libId}/items?include=progress`);
     return data?.results || data || [];
   }
@@ -125,7 +152,7 @@ export class ABSService {
         body: JSON.stringify(progressData),
       });
     } catch (e) {
-      console.warn("Sync failed");
+      console.warn("Sync failed", e);
     }
   }
 

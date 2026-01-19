@@ -30,7 +30,7 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
       const libraryItems = await absService.getLibraryItems();
       setItems(libraryItems);
     } catch (e) {
-      console.error("Library synchronization failed");
+      console.error("Library sync failed");
     } finally {
       setLoading(false);
     }
@@ -90,13 +90,12 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
   if (loading) return (
     <div className="flex-1 flex flex-col items-center justify-center bg-black h-[100dvh]">
       <div className="w-12 h-12 border-4 border-aether-purple/20 border-t-aether-purple rounded-full animate-spin mb-6" />
-      <h2 className="text-[10px] font-black uppercase tracking-[0.5em] text-neutral-800 animate-pulse">Establishing Link</h2>
+      <h2 className="text-[10px] font-black uppercase tracking-[0.5em] text-neutral-800 animate-pulse">Syncing Archive</h2>
     </div>
   );
 
   return (
     <div className="flex-1 flex flex-col safe-top overflow-hidden bg-black h-[100dvh]">
-      {/* Header */}
       <div className="px-6 pt-10 pb-4 space-y-6 shrink-0">
         <div className="flex justify-between items-center">
           <div>
@@ -120,7 +119,6 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
         </div>
       </div>
 
-      {/* Tabs */}
       <nav className="flex px-6 gap-8 shrink-0 border-b border-white/5 bg-black/50 backdrop-blur-md">
         {[
           { id: 'HOME', icon: Home, label: 'Home' },
@@ -139,7 +137,6 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
         ))}
       </nav>
 
-      {/* Main Content Area */}
       <div className="flex-1 overflow-y-auto px-6 py-8 no-scrollbar scroll-container pb-32 touch-pan-y">
         <div className="animate-fade-in">
           
@@ -147,7 +144,7 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
             <div className="space-y-10 animate-slide-up">
               <button onClick={() => setSelectedSeries(null)} className="flex items-center gap-2 text-aether-purple text-[10px] font-black uppercase tracking-widest bg-neutral-900/40 px-5 py-2.5 rounded-full border border-white/5">
                 <ChevronRight className="rotate-180" size={14} />
-                Return to Stacks
+                Back to Stacks
               </button>
               <div className="space-y-2">
                 <h3 className="text-3xl font-black uppercase tracking-tighter text-white">{selectedSeries.name}</h3>
@@ -161,7 +158,6 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
             </div>
           ) : activeTab === 'HOME' ? (
             <div className="space-y-16">
-              {/* Cinematic Hero */}
               <section className="space-y-6">
                 <div className="flex items-center gap-2 text-neutral-800">
                   <Clock size={12} />
@@ -191,7 +187,6 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
                 )}
               </section>
 
-              {/* Recently Added Section */}
               <section className="space-y-8">
                 <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-neutral-800">Recently Discovered</h3>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-x-6 gap-y-10">
@@ -211,7 +206,6 @@ const Library: React.FC<LibraryProps> = ({ auth, onSelectItem, onLogout }) => {
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-8 gap-y-16">
               {seriesStacks.map(stack => (
                 <div key={stack.name} onClick={() => setSelectedSeries(stack)} className="relative cursor-pointer group active:scale-95 transition-all">
-                  {/* Visual Stack Effect */}
                   <div className="absolute inset-0 bg-neutral-800/40 rounded-[36px] translate-x-3 -translate-y-3 border border-white/5 z-0 transition-transform group-hover:translate-x-4 group-hover:-translate-y-4" />
                   <div className="absolute inset-0 bg-neutral-900/60 rounded-[36px] translate-x-1.5 -translate-y-1.5 border border-white/5 z-10 transition-transform group-hover:translate-x-2 group-hover:-translate-y-2" />
                   
