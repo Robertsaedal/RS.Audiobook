@@ -1,6 +1,5 @@
-
 import React from 'react';
-import { Home, Layers, LogOut, Activity, Headphones } from 'lucide-react';
+import { Home, Layers, LogOut, Activity } from 'lucide-react';
 
 export type NavTab = 'HOME' | 'SERIES';
 
@@ -18,14 +17,14 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange, onLogou
 
   const Logo = () => (
     <div className="flex items-center gap-3">
-      <div className="w-10 h-10 gradient-aether rounded-xl flex items-center justify-center shadow-lg shadow-aether-purple/20">
-        <Headphones className="text-white" size={20} />
+      <div className="w-10 h-10 rounded-xl overflow-hidden shadow-lg shadow-purple-900/20 bg-neutral-900">
+        <img src="/logo.png" alt="Logo" className="w-full h-full object-cover" />
       </div>
       <div>
-        <h2 className="text-xl font-black tracking-tighter text-white">R.S AUDIO</h2>
+        <h2 className="text-sm font-black tracking-tight text-white leading-tight">R.S AUDIOBOOK</h2>
         <div className="flex items-center gap-2">
-          <Activity size={8} className="text-aether-purple" />
-          <p className="text-[7px] uppercase tracking-[0.4em] text-neutral-500 font-black">Spec V5.0</p>
+          <Activity size={8} className="text-purple-500" />
+          <p className="text-[7px] uppercase tracking-[0.4em] text-neutral-500 font-black">PLAYER V5.0</p>
         </div>
       </div>
     </div>
@@ -46,11 +45,11 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange, onLogou
               onClick={() => onTabChange(item.id)}
               className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all font-black text-[11px] uppercase tracking-widest ${
                 activeTab === item.id 
-                  ? 'bg-aether-purple/10 text-white border border-aether-purple/20' 
+                  ? 'bg-purple-600/10 text-white border border-purple-600/20' 
                   : 'text-neutral-500 hover:text-white hover:bg-neutral-900'
               }`}
             >
-              <item.icon size={18} className={activeTab === item.id ? 'text-aether-purple' : ''} />
+              <item.icon size={18} className={activeTab === item.id ? 'text-purple-500' : ''} />
               {item.label}
             </button>
           ))}
@@ -72,10 +71,10 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange, onLogou
             key={item.id}
             onClick={() => onTabChange(item.id)}
             className={`flex flex-col items-center gap-1 transition-all ${
-              activeTab === item.id ? 'text-aether-purple' : 'text-neutral-600'
+              activeTab === item.id ? 'text-purple-500' : 'text-neutral-600'
             }`}
           >
-            <div className={`p-2 rounded-xl transition-all ${activeTab === item.id ? 'bg-aether-purple/10' : ''}`}>
+            <div className={`p-2 rounded-xl transition-all ${activeTab === item.id ? 'bg-purple-600/10' : ''}`}>
               <item.icon size={22} />
             </div>
             <span className="text-[8px] font-black uppercase tracking-tighter">{item.label}</span>

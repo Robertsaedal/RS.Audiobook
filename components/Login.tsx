@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { AuthState } from '../types';
 import { ABSService } from '../services/absService';
@@ -9,7 +8,6 @@ interface LoginProps {
 }
 
 const Login: React.FC<LoginProps> = ({ onLogin }) => {
-  // PRE-FILLED: Specific server address for user
   const [serverUrl, setServerUrl] = useState('https://rs-audio-server.duckdns.org');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -38,10 +36,10 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         setError(
           <div className="space-y-2">
             <p className="text-red-400 font-black uppercase text-[10px] tracking-widest">Connection Blocked (CORS)</p>
-            <p className="text-neutral-500 text-[9px] leading-relaxed uppercase font-bold">
-              Your server must allow this origin. Go to <span className="text-white">Settings &gt; General &gt; Allowed Origins</span> in Audiobookshelf and add:
+            <p className="text-neutral-500 text-[9px] leading-relaxed uppercase font-bold text-center">
+              Add this origin to Audiobookshelf Allowed Origins:
               <br />
-              <span className="text-aether-purple break-all mt-1 block font-mono">{window.location.origin}</span>
+              <span className="text-purple-500 break-all mt-1 block font-mono">{window.location.origin}</span>
             </p>
           </div>
         );
@@ -56,10 +54,13 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   return (
     <div className="flex-1 flex flex-col items-center justify-center p-8 bg-black h-[100dvh] overflow-hidden">
       <div className="w-full max-w-md space-y-12 animate-fade-in relative">
-        <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-64 h-64 bg-aether-purple/10 rounded-full blur-[100px] pointer-events-none" />
+        <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-64 h-64 bg-purple-600/10 rounded-full blur-[100px] pointer-events-none" />
         
-        <div className="text-center relative">
-          <h1 className="text-6xl font-black tracking-tighter text-aether-purple mb-2 drop-shadow-aether-glow">AETHER</h1>
+        <div className="text-center relative flex flex-col items-center">
+          <div className="w-20 h-20 rounded-3xl overflow-hidden shadow-2xl mb-6 bg-neutral-900 border border-white/5">
+            <img src="/logo.png" alt="Logo" className="w-full h-full object-cover" />
+          </div>
+          <h1 className="text-3xl font-black tracking-tighter text-purple-500 mb-2 drop-shadow-aether-glow leading-tight">R.S AUDIOBOOK PLAYER</h1>
           <div className="flex items-center justify-center gap-2">
             <Activity size={10} className="text-neutral-700" />
             <p className="text-neutral-700 uppercase tracking-[0.5em] text-[10px] font-black">Secure Link Portal</p>
@@ -68,37 +69,37 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
         <form onSubmit={handleSubmit} className="space-y-4 relative">
           <div className="relative group">
-            <LinkIcon size={14} className="absolute left-5 top-1/2 -translate-y-1/2 text-neutral-800 group-focus-within:text-aether-purple transition-colors" />
+            <LinkIcon size={14} className="absolute left-5 top-1/2 -translate-y-1/2 text-neutral-800 group-focus-within:text-purple-500 transition-colors" />
             <input
               type="text"
               placeholder="SERVER ENDPOINT"
               value={serverUrl}
               onChange={(e) => setServerUrl(e.target.value)}
-              className="w-full bg-neutral-900 border-none py-5 pl-14 pr-6 rounded-[24px] text-white placeholder-neutral-800 font-black text-xs tracking-widest outline-none focus:ring-1 focus:ring-aether-purple/40 transition-all"
+              className="w-full bg-neutral-900 border-none py-5 pl-14 pr-6 rounded-[24px] text-white placeholder-neutral-800 font-black text-xs tracking-widest outline-none focus:ring-1 focus:ring-purple-600/40 transition-all"
               required
             />
           </div>
 
           <div className="relative group">
-            <User size={14} className="absolute left-5 top-1/2 -translate-y-1/2 text-neutral-800 group-focus-within:text-aether-purple transition-colors" />
+            <User size={14} className="absolute left-5 top-1/2 -translate-y-1/2 text-neutral-800 group-focus-within:text-purple-500 transition-colors" />
             <input
               type="text"
               placeholder="USERNAME"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              className="w-full bg-neutral-900 border-none py-5 pl-14 pr-6 rounded-[24px] text-white placeholder-neutral-800 font-black text-xs tracking-widest outline-none focus:ring-1 focus:ring-aether-purple/40 transition-all"
+              className="w-full bg-neutral-900 border-none py-5 pl-14 pr-6 rounded-[24px] text-white placeholder-neutral-800 font-black text-xs tracking-widest outline-none focus:ring-1 focus:ring-purple-600/40 transition-all"
               required
             />
           </div>
 
           <div className="relative group">
-            <Lock size={14} className="absolute left-5 top-1/2 -translate-y-1/2 text-neutral-800 group-focus-within:text-aether-purple transition-colors" />
+            <Lock size={14} className="absolute left-5 top-1/2 -translate-y-1/2 text-neutral-800 group-focus-within:text-purple-500 transition-colors" />
             <input
               type="password"
               placeholder="PASSWORD"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full bg-neutral-900 border-none py-5 pl-14 pr-6 rounded-[24px] text-white placeholder-neutral-800 font-black text-xs tracking-widest outline-none focus:ring-1 focus:ring-aether-purple/40 transition-all"
+              className="w-full bg-neutral-900 border-none py-5 pl-14 pr-6 rounded-[24px] text-white placeholder-neutral-800 font-black text-xs tracking-widest outline-none focus:ring-1 focus:ring-purple-600/40 transition-all"
               required
             />
           </div>
@@ -124,7 +125,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         </form>
 
         <div className="text-center pt-8">
-          <p className="text-[8px] font-black text-neutral-800 uppercase tracking-[0.4em]">Proprietary Archive Technology • V3.2</p>
+          <p className="text-[8px] font-black text-neutral-800 uppercase tracking-[0.4em]">Proprietary Archive Technology • V5.2</p>
         </div>
       </div>
     </div>

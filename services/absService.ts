@@ -32,30 +32,34 @@ export class ABSService {
       transports: ['websocket'],
       autoConnect: true,
       reconnection: true,
+      timeout: 10000,
     });
   }
 
-  onProgressUpdate(callback: (progress: ABSProgress) => void) {
-    this.socket?.on('user_item_progress_updated', (data) => {
-      if (data && data.itemId) callback(data);
-    });
-  }
-
-  onLibraryUpdate(callback: () => void) {
-    this.socket?.on('item_added', callback);
-    this.socket?.on('item_removed', callback);
+  private static async fetchWithTimeout(url: string, options: RequestInit, timeout = 15000) {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeout);
+    try {
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal
+      });
+      clearTimeout(id);
+      return response;
+    } catch (e: any) {
+      clearTimeout(id);
+      if (e.name === 'AbortError') throw new Error('TIMEOUT');
+      throw e;
+    }
   }
 
   static async login(serverUrl: string, username: string, password: string): Promise<any> {
     const baseUrl = this.normalizeUrl(serverUrl);
-
     try {
-      const response = await fetch(`${baseUrl}/login`, {
+      const response = await this.fetchWithTimeout(`${baseUrl}/login`, {
         method: 'POST',
         mode: 'cors',
-        headers: { 
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: username.trim(), password }),
       });
 
@@ -65,9 +69,8 @@ export class ABSService {
       }
       return response.json();
     } catch (err: any) {
-      if (err.name === 'TypeError' && err.message === 'Failed to fetch') {
-        throw new Error('CORS_ERROR');
-      }
+      if (err.message === 'TIMEOUT') throw new Error('Connection timed out. Check your server URL.');
+      if (err.name === 'TypeError' && err.message === 'Failed to fetch') throw new Error('CORS_ERROR');
       throw err;
     }
   }
@@ -75,10 +78,10 @@ export class ABSService {
   private async fetchApi(endpoint: string, options: RequestInit = {}) {
     const url = `${this.serverUrl}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
     try {
-      const response = await fetch(url, {
+      const response = await ABSService.fetchWithTimeout(url, {
         ...options,
         mode: 'cors',
-        cache: 'no-store', // Prevent stale heavy data
+        cache: 'no-store',
         headers: {
           'Authorization': `Bearer ${this.token}`,
           'Content-Type': 'application/json',
@@ -100,10 +103,6 @@ export class ABSService {
     return isNaN(parsed) ? (parseInt(date, 10) || 0) : parsed;
   }
 
-  async getMeProgress(): Promise<any> {
-    return this.fetchApi('/api/me/progress');
-  }
-
   async getProgress(itemId: string): Promise<ABSProgress | null> {
     return this.fetchApi(`/api/me/progress/${itemId}`);
   }
@@ -119,6 +118,7 @@ export class ABSService {
 
   async getLibraryItems(): Promise<ABSLibraryItem[]> {
     const libId = await this.ensureLibraryId();
+    if (!libId) return [];
     const data = await this.fetchApi(`/api/libraries/${libId}/items?include=progress`);
     return data?.results || data || [];
   }
@@ -156,6 +156,17 @@ export class ABSService {
 
   getCoverUrl(itemId: string): string {
     return `${this.serverUrl}/api/items/${itemId}/cover?token=${this.token}`;
+  }
+
+  onProgressUpdate(callback: (progress: ABSProgress) => void) {
+    this.socket?.on('user_item_progress_updated', (data) => {
+      if (data && data.itemId) callback(data);
+    });
+  }
+
+  onLibraryUpdate(callback: () => void) {
+    this.socket?.on('item_added', callback);
+    this.socket?.on('item_removed', callback);
   }
 
   disconnect() {
