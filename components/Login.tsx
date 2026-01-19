@@ -9,7 +9,7 @@ interface LoginProps {
 }
 
 const Login: React.FC<LoginProps> = ({ onLogin }) => {
-  // PRE-FILLED: Update 'YOUR_SUBDOMAIN' with your actual DuckDNS name
+  // PRE-FILLED: Replace 'YOUR_SUBDOMAIN' with your actual DuckDNS name
   const [serverUrl, setServerUrl] = useState('https://YOUR_SUBDOMAIN.duckdns.org');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -39,9 +39,9 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
           <div className="space-y-2">
             <p className="text-red-400 font-black uppercase text-[10px] tracking-widest">Connection Blocked (CORS)</p>
             <p className="text-neutral-500 text-[9px] leading-relaxed uppercase font-bold">
-              Your server must allow this origin. Go to <span className="text-white">Settings > General > Allowed Origins</span> in Audiobookshelf and add:
+              Your server must allow this origin. Go to <span className="text-white">Settings &gt; General &gt; Allowed Origins</span> in Audiobookshelf and add:
               <br />
-              <span className="text-aether-purple break-all mt-1 block">{window.location.origin}</span>
+              <span className="text-aether-purple break-all mt-1 block font-mono">{window.location.origin}</span>
             </p>
           </div>
         );
