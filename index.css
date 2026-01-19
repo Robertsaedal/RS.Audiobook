@@ -1,24 +1,17 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
-  body {
-    /* FIXED: Changed overflow-hidden to overflow-y-auto to allow scrolling */
-    @apply bg-black text-white overflow-y-auto;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    
-    /* Helps prevent the "bounce" effect on mobile but allows scrolling */
-    overscroll-behavior-y: contain; 
+  html, body {
+    @apply bg-black text-white h-[100dvh] w-full overflow-hidden;
+    overscroll-behavior-y: contain;
     -webkit-tap-highlight-color: transparent;
-    min-height: 100vh;
   }
 
-  /* Ensure the root container also allows the full height */
   #root {
-    min-height: 100vh;
-    display: flex;
-    flex-col: column;
+    @apply h-full w-full flex flex-col;
   }
 }
 
@@ -52,25 +45,20 @@
     scrollbar-width: none;
   }
 
-  /* Add this to help the library grid scroll smoothly */
   .scroll-container {
     -webkit-overflow-scrolling: touch;
     overflow-y: auto;
+    overscroll-behavior-y: auto;
   }
 }
 
-/* Custom scrollbar */
 ::-webkit-scrollbar {
-  width: 4px;
+  width: 3px;
 }
 ::-webkit-scrollbar-track {
-  background: #000;
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
   background: #333;
   border-radius: 10px;
-}
-
-input:focus {
-  outline: none;
 }
