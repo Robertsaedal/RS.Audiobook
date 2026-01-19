@@ -1,6 +1,7 @@
+
 {
   "name": "R.S Audiobooks",
-  "description": "A minimalist, sleek Audiobookshelf client with precision controls and chapter-based sleep timer.",
+  "description": "Premium minimalist Audiobookshelf PWA with precision chapter controls and offline-ready sync.",
   "requestFramePermissions": [
     "microphone"
   ]
