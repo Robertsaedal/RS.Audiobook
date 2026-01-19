@@ -8,7 +8,7 @@ interface LoginProps {
 }
 
 const Login: React.FC<LoginProps> = ({ onLogin }) => {
-  const [serverUrl, setServerUrl] = useState('https://rs-audio-server.duckdns.org');
+  const [serverUrl, setServerUrl] = useState('https://api.robertsaedal.xyz');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);

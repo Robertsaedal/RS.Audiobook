@@ -35,28 +35,54 @@ export class ABSService {
     });
   }
 
-  private static async fetchWithTimeout(url: string, options: RequestInit, timeout = 10000) {
-    const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), timeout);
-    try {
-      const response = await fetch(url, {
-        ...options,
-        signal: controller.signal
-      });
-      clearTimeout(id);
-      return response;
-    } catch (e: any) {
-      clearTimeout(id);
-      if (e.name === 'AbortError') throw new Error('TIMEOUT');
-      throw e;
+  /**
+   * Enhanced fetch with 5s timeout and 3 retries
+   */
+  private static async fetchWithRetry(url: string, options: RequestInit, retries = 3, timeout = 5000): Promise<Response> {
+    let lastError: Error | null = null;
+    
+    for (let i = 0; i < retries; i++) {
+      const controller = new AbortController();
+      const id = setTimeout(() => controller.abort(), timeout);
+      
+      try {
+        const response = await fetch(url, {
+          ...options,
+          signal: controller.signal
+        });
+        clearTimeout(id);
+        
+        // Return if successful or if it's a client error (no point retrying 401/404)
+        if (response.ok || response.status < 500) {
+          return response;
+        }
+        
+        // Server errors (5xx) might benefit from retry
+        throw new Error(`SERVER_ERROR_${response.status}`);
+      } catch (e: any) {
+        clearTimeout(id);
+        lastError = e;
+        
+        if (e.name === 'AbortError') {
+          console.warn(`Attempt ${i + 1} timed out for ${url}`);
+        } else {
+          console.warn(`Attempt ${i + 1} failed for ${url}:`, e.message);
+        }
+        
+        // Wait before retrying (exponential backoff)
+        if (i < retries - 1) {
+          await new Promise(resolve => setTimeout(resolve, 500 * (i + 1)));
+        }
+      }
     }
+    
+    throw lastError || new Error('FAILED_AFTER_RETRIES');
   }
 
   static async login(serverUrl: string, username: string, password: string): Promise<any> {
     const baseUrl = this.normalizeUrl(serverUrl);
     try {
-      // SIMPLIFIED FETCH: Remove custom headers to avoid Preflight/CORS issues
-      const response = await this.fetchWithTimeout(`${baseUrl}/login`, {
+      const response = await this.fetchWithRetry(`${baseUrl}/login`, {
         method: 'POST',
         mode: 'cors',
         headers: { 
@@ -71,7 +97,9 @@ export class ABSService {
       }
       return response.json();
     } catch (err: any) {
-      if (err.message === 'TIMEOUT') throw new Error('Server link timeout. Check connection.');
+      if (err.name === 'AbortError' || err.message === 'FAILED_AFTER_RETRIES') {
+        throw new Error('Server link timeout. Check connection.');
+      }
       if (err.name === 'TypeError' && err.message === 'Failed to fetch') throw new Error('CORS_ERROR');
       throw err;
     }
@@ -80,7 +108,7 @@ export class ABSService {
   private async fetchApi(endpoint: string, options: RequestInit = {}) {
     const url = `${this.serverUrl}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
     try {
-      const response = await ABSService.fetchWithTimeout(url, {
+      const response = await ABSService.fetchWithRetry(url, {
         ...options,
         mode: 'cors',
         cache: 'no-store',
@@ -140,7 +168,8 @@ export class ABSService {
       isFinished: currentTime >= duration - 10 && duration > 0
     };
     try {
-      await fetch(`${this.serverUrl}/api/me/progress/${itemId}`, {
+      // Use retry logic even for progress saving to ensure continuity
+      await ABSService.fetchWithRetry(`${this.serverUrl}/api/me/progress/${itemId}`, {
         method: 'PATCH',
         mode: 'cors',
         headers: {

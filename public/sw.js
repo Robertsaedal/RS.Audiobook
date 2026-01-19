@@ -1,4 +1,4 @@
-const CACHE_NAME = 'rs-audio-v9';
+const CACHE_NAME = 'rs-audio-v10';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -27,9 +27,10 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // NO-INTERFERE: Early return for DuckDNS and API requests to avoid CORS/latency hangs
+  // NO-INTERFERE: Early return for API domains and streams
   if (
     url.hostname.includes('duckdns.org') || 
+    url.hostname.includes('robertsaedal.xyz') || 
     url.pathname.includes('/api/') ||
     url.pathname.includes('/socket.io') ||
     url.pathname.endsWith('.m3u8') || 
