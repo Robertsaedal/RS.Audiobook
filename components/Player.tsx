@@ -15,6 +15,7 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
   const syncIntervalRef = useRef<number | null>(null);
   const hlsRef = useRef<Hls | null>(null);
   const isMounted = useRef(true);
+  const loadTimeoutRef = useRef<number | null>(null);
   
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -101,9 +102,20 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
 
   useEffect(() => {
     isMounted.current = true;
+    
     const init = async () => {
       setError(null);
       setIsLoading(true);
+
+      // 10 Second Master Loading Timeout
+      loadTimeoutRef.current = window.setTimeout(() => {
+        if (isLoading && isMounted.current) {
+          setError('Unable to stream from server. Link timed out.');
+          setIsLoading(false);
+          hlsRef.current?.destroy();
+        }
+      }, 10000);
+
       try {
         const [details, playbackSession] = await Promise.all([
           absService.getItemDetails(item.id),
@@ -113,7 +125,7 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
         if (!isMounted.current) return;
 
         if (!details || !playbackSession) {
-          throw new Error("Failed to initialize playback session. Check server connection.");
+          throw new Error("Unable to stream from server. Session initiation failed.");
         }
 
         setChapters(details.media.chapters || []);
@@ -121,37 +133,58 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
         const startAt = progress?.currentTime || 0;
 
         if (audioRef.current) {
+          // Mandatory for iOS/iPad playback from remote server
+          audioRef.current.crossOrigin = 'anonymous';
+          
           const hlsUrl = `${auth.serverUrl}/api/items/${item.id}/play/${playbackSession.id}/hls/m3u8?token=${auth.user?.token}`;
           
           if (Hls.isSupported()) {
             if (hlsRef.current) hlsRef.current.destroy();
-            hlsRef.current = new Hls({ 
+            
+            const hls = new Hls({ 
               enableWorker: true,
               maxBufferLength: 20,
               maxMaxBufferLength: 40,
               startPosition: startAt,
               autoStartLoad: true,
               lowLatencyMode: true,
-              backBufferLength: 60
+              backBufferLength: 60,
+              // Optimize for snappier startup
+              manifestLoadingMaxRetry: 3,
+              levelLoadingMaxRetry: 3
             });
             
-            hlsRef.current.attachMedia(audioRef.current);
-            hlsRef.current.on(Hls.Events.MEDIA_ATTACHED, () => {
-              hlsRef.current?.loadSource(hlsUrl);
+            hlsRef.current = hls;
+            hls.attachMedia(audioRef.current);
+            
+            hls.on(Hls.Events.MEDIA_ATTACHED, () => {
+              hls.loadSource(hlsUrl);
             });
             
-            hlsRef.current.on(Hls.Events.MANIFEST_PARSED, () => {
+            hls.on(Hls.Events.MANIFEST_PARSED, () => {
               if (isMounted.current) {
+                if (loadTimeoutRef.current) clearTimeout(loadTimeoutRef.current);
                 setIsLoading(false);
               }
             });
 
-            hlsRef.current.on(Hls.Events.ERROR, (_, data) => {
+            hls.on(Hls.Events.ERROR, (_, data) => {
               if (data.fatal) {
-                console.error("Fatal HLS Error:", data.type);
-                if (isMounted.current) {
-                  setError("Stream encounterd a fatal error. Reconnecting...");
-                  hlsRef.current?.destroy();
+                switch (data.type) {
+                  case Hls.ErrorTypes.NETWORK_ERROR:
+                    console.error("Fatal Network Error:", data);
+                    hls.startLoad();
+                    break;
+                  case Hls.ErrorTypes.MEDIA_ERROR:
+                    console.error("Fatal Media Error:", data);
+                    hls.recoverMediaError();
+                    break;
+                  default:
+                    if (isMounted.current) {
+                      setError("Unable to stream from server. Connection broken.");
+                      hls.destroy();
+                    }
+                    break;
                 }
               }
             });
@@ -160,6 +193,7 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
             audioRef.current.src = hlsUrl;
             audioRef.current.addEventListener('loadedmetadata', () => {
               if (audioRef.current && isMounted.current) {
+                if (loadTimeoutRef.current) clearTimeout(loadTimeoutRef.current);
                 audioRef.current.currentTime = startAt;
                 setCurrentTime(startAt);
                 setIsLoading(false);
@@ -167,10 +201,14 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
             }, { once: true });
             
             audioRef.current.addEventListener('error', () => {
-              if (isMounted.current) setError("Native audio link failed.");
+              if (isMounted.current) {
+                if (loadTimeoutRef.current) clearTimeout(loadTimeoutRef.current);
+                setError("Unable to stream from server. Native decoder failed.");
+                setIsLoading(false);
+              }
             }, { once: true });
           } else {
-            throw new Error("HLS playback is not supported in this browser.");
+            throw new Error("HLS playback is not supported in this environment.");
           }
 
           setupMediaSession();
@@ -178,15 +216,18 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
       } catch (e: any) { 
         console.error("Player initialization error", e);
         if (isMounted.current) {
-          setError(e.message || "Archive link failed.");
+          if (loadTimeoutRef.current) clearTimeout(loadTimeoutRef.current);
+          setError(e.message || "Unable to stream from server.");
           setIsLoading(false);
         }
       }
     };
 
     init();
+
     return () => { 
       isMounted.current = false;
+      if (loadTimeoutRef.current) clearTimeout(loadTimeoutRef.current);
       if (hlsRef.current) hlsRef.current.destroy();
     };
   }, [item.id, absService, auth]);
@@ -229,11 +270,11 @@ const Player: React.FC<PlayerProps> = ({ auth, item, onBack }) => {
       </div>
       <button 
         onClick={() => window.location.reload()} 
-        className="px-10 py-4 bg-purple-600 rounded-full font-black uppercase text-[10px] tracking-[0.3em] active:scale-95 transition-all"
+        className="px-10 py-4 bg-purple-600 rounded-full font-black uppercase text-[10px] tracking-[0.3em] active:scale-95 transition-all shadow-lg"
       >
-        Re-establish Connection
+        Retry Portal
       </button>
-      <button onClick={onBack} className="text-[10px] font-black uppercase tracking-widest text-neutral-700">Return to Library</button>
+      <button onClick={onBack} className="text-[10px] font-black uppercase tracking-widest text-neutral-700 hover:text-white transition-colors">Return to Library</button>
     </div>
   );
 
