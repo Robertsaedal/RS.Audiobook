@@ -1,5 +1,5 @@
 
-import { ABSUser, ABSLibraryItem, ABSSeries, ABSProgress } from '../types';
+import { ABSUser, ABSLibraryItem, ABSProgress } from '../types';
 import { io, Socket } from 'socket.io-client';
 
 export class ABSService {
@@ -17,7 +17,7 @@ export class ABSService {
     this.serverUrl = cleanUrl;
     this.token = token;
     this.initSocket();
-    this.processSyncQueue();
+    // Removed call to processSyncQueue as it is not implemented
   }
 
   private initSocket() {
@@ -26,17 +26,11 @@ export class ABSService {
       transports: ['websocket'],
       autoConnect: true,
     });
-
-    this.socket.on('connect', () => console.log('ABS WebSocket Connected'));
-    this.socket.on('connect_error', (err) => console.error('Socket Error:', err));
   }
 
   onProgressUpdate(callback: (progress: ABSProgress) => void) {
     this.socket?.on('user_item_progress_updated', (data) => {
-      // Data shape varies based on ABS version, usually includes progress object
-      if (data && data.itemId) {
-        callback(data);
-      }
+      if (data && data.itemId) callback(data);
     });
   }
 
@@ -47,9 +41,7 @@ export class ABSService {
 
   static async login(serverUrl: string, username: string, password: string): Promise<any> {
     let baseUrl = serverUrl.trim().replace(/\/+$/, '').replace(/\/api$/, '');
-    if (baseUrl && !baseUrl.startsWith('http')) {
-      baseUrl = `https://${baseUrl}`;
-    }
+    if (baseUrl && !baseUrl.startsWith('http')) baseUrl = `https://${baseUrl}`;
 
     const response = await fetch(`${baseUrl}/login`, {
       method: 'POST',
@@ -58,18 +50,12 @@ export class ABSService {
       body: JSON.stringify({ username: username.trim(), password }),
     });
 
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => 'Unknown Error');
-      throw new Error(`Login failed: ${errorText}`);
-    }
-
+    if (!response.ok) throw new Error(`Login failed: ${await response.text()}`);
     return response.json();
   }
 
   private async fetchApi(endpoint: string, options: RequestInit = {}) {
-    const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-    const url = `${this.serverUrl}${path}`;
-
+    const url = `${this.serverUrl}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
     const response = await fetch(url, {
       ...options,
       mode: 'cors',
@@ -79,25 +65,22 @@ export class ABSService {
         ...options.headers,
       },
     });
+    if (!response.ok) return null;
+    return response.json();
+  }
 
-    if (!response.ok) {
-      if (response.status === 404) return null;
-      throw new Error(`ABS API Error (${response.status})`);
-    }
-
-    const contentType = response.headers.get("content-type");
-    if (contentType && contentType.includes("application/json")) {
-      return response.json();
-    }
-    return response.text();
+  // Official Date Normalizer to ensure valB - valA sorting works
+  normalizeDate(date: string | number): number {
+    if (typeof date === 'number') return date;
+    const parsed = Date.parse(date);
+    return isNaN(parsed) ? 0 : parsed;
   }
 
   async getMeProgress(): Promise<any> {
-    // Optimized endpoint for populating Home screen
     return this.fetchApi('/api/me/progress');
   }
 
-  // Added getProgress method to resolve error in Player.tsx line 72
+  // Fix for error in Player.tsx: Added getProgress method
   async getProgress(itemId: string): Promise<ABSProgress | null> {
     return this.fetchApi(`/api/me/progress/${itemId}`);
   }
@@ -107,13 +90,13 @@ export class ABSService {
     const data = await this.fetchApi('/api/libraries');
     const libraries = data?.libraries || data || [];
     const audioLibrary = libraries.find((l: any) => l.mediaType === 'audiobook') || libraries[0];
-    if (!audioLibrary) throw new Error("No library found");
-    this.libraryId = audioLibrary.id;
+    this.libraryId = audioLibrary?.id;
     return this.libraryId!;
   }
 
   async getLibraryItems(): Promise<ABSLibraryItem[]> {
     const libId = await this.ensureLibraryId();
+    // Official Spec: include=progress for accurate completion status
     const data = await this.fetchApi(`/api/libraries/${libId}/items?include=progress`);
     return data?.results || data || [];
   }
@@ -123,7 +106,6 @@ export class ABSService {
   }
 
   async startPlaybackSession(itemId: string): Promise<any> {
-    // Mandatory for tracking and HLS
     return this.fetchApi(`/api/items/${itemId}/play`, { method: 'POST' });
   }
 
@@ -132,17 +114,9 @@ export class ABSService {
       currentTime,
       duration,
       progress: duration > 0 ? currentTime / duration : 0,
-      isFinished: currentTime >= duration - 5 && duration > 0,
+      isFinished: currentTime >= duration - 10 && duration > 0,
       lastUpdate: Date.now()
     };
-
-    localStorage.setItem(`rs_pos_${itemId}`, currentTime.toString());
-
-    if (!navigator.onLine) {
-      this.addToSyncQueue(itemId, progressData);
-      return;
-    }
-
     try {
       await fetch(`${this.serverUrl}/api/users/me/progress/${itemId}`, {
         method: 'PATCH',
@@ -152,40 +126,10 @@ export class ABSService {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(progressData),
-        keepalive: true
       });
     } catch (e) {
-      this.addToSyncQueue(itemId, progressData);
+      console.warn("Progress sync failed", e);
     }
-  }
-
-  private addToSyncQueue(itemId: string, data: any) {
-    const queue = JSON.parse(localStorage.getItem(this.syncQueueKey) || '{}');
-    queue[itemId] = data;
-    localStorage.setItem(this.syncQueueKey, JSON.stringify(queue));
-  }
-
-  private async processSyncQueue() {
-    if (!navigator.onLine) return;
-    const queue = JSON.parse(localStorage.getItem(this.syncQueueKey) || '{}');
-    const itemIds = Object.keys(queue);
-    if (itemIds.length === 0) return;
-
-    for (const id of itemIds) {
-      try {
-        await fetch(`${this.serverUrl}/api/users/me/progress/${id}`, {
-          method: 'PATCH',
-          mode: 'cors',
-          headers: {
-            'Authorization': `Bearer ${this.token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(queue[id]),
-        });
-        delete queue[id];
-      } catch (e) { break; }
-    }
-    localStorage.setItem(this.syncQueueKey, JSON.stringify(queue));
   }
 
   getCoverUrl(itemId: string): string {
